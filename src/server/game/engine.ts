@@ -36,6 +36,13 @@ import {
   setRelics,
   submitToLeaderboard,
 } from './store.ts'
+import {
+  reportAppReady,
+  reportBandProgress,
+  reportInteraction,
+  reportJourneyEnd,
+  startJourney,
+} from './telemetry.ts'
 
 export class GameError extends Error {}
 
@@ -60,6 +67,7 @@ function freshRun(): ActiveRun {
     minHp: STARTING_HP,
     lastBand: 0,
     pendingType: null,
+    journeyId: '',
   }
 }
 
@@ -153,6 +161,12 @@ function seedFor(userId: T2): string {
 }
 
 export async function getHub(userId: T2): Promise<HubRsp> {
+  // Best-effort proxy for "the game has loaded and is interactive" — the
+  // Hub screen is the first thing rendered, and this is the first request
+  // it makes. Not deduplicated per browser session (no clean server-side
+  // signal for that here); an occasional extra App.Ready per visit is
+  // harmless, per the Journeys docs.
+  await reportAppReady()
   const [profile, relics] = await Promise.all([
     getProfile(userId),
     getRelics(userId),
@@ -295,6 +309,9 @@ export async function enterPyramid(userId: T2): Promise<EncounterResult> {
   const seed = seedFor(userId)
   const run = freshRun()
   const result = rollEncounter(seed, run)
+  // "Enter the Pyramid" is the explicit user action that begins a session —
+  // Journey.Start must never fire on app load (see telemetry.ts).
+  run.journeyId = await startJourney()
   await setActiveRun(userId, run)
   return result
 }
@@ -304,6 +321,13 @@ export async function pushDeeper(userId: T2): Promise<EncounterResult> {
   if (!run.active) throw new GameError('no active run')
   const seed = seedFor(userId)
   const result = rollEncounter(seed, run)
+  if (result.bandJustChanged) {
+    await reportBandProgress(
+      run.journeyId,
+      bandFor(run.depth),
+      result.bandLabel,
+    )
+  }
   await setActiveRun(userId, run)
   return result
 }
@@ -329,6 +353,10 @@ async function resolveHazard(
 
   run.hazardsFaced += 1
   run.pendingType = null
+  await reportInteraction(
+    run.journeyId,
+    useWard ? 'ward_used' : 'push_unwarded',
+  )
 
   if (useWard) {
     run.wards -= 1
@@ -372,6 +400,7 @@ async function resolveHazard(
     const profile = await getProfile(userId)
     const report = buildReport('died', run, run.gold, profile)
     await setProfile(userId, profile)
+    await reportJourneyEnd(run.journeyId, false, run.gold)
     await clearActiveRun(userId)
     return {
       useWard: false,
@@ -412,6 +441,7 @@ export async function resolveGambleRisk(userId: T2): Promise<GambleOutcome> {
   const depth = run.depth
   const band = bandFor(depth)
   run.pendingType = null
+  await reportInteraction(run.journeyId, 'gamble_risked')
 
   const success =
     rollPercent(seed, depth, 'gambleSuccess') < PARAMS.gambleSuccess
@@ -435,6 +465,7 @@ export async function resolveGambleRisk(userId: T2): Promise<GambleOutcome> {
     const profile = await getProfile(userId)
     const report = buildReport('died', run, run.gold, profile)
     await setProfile(userId, profile)
+    await reportJourneyEnd(run.journeyId, false, run.gold)
     await clearActiveRun(userId)
     return {
       success: false,
@@ -469,6 +500,7 @@ export async function extract(
   await setProfile(userId, profile)
   if (isNewBest)
     await submitToLeaderboard(userId, username, profile.best, profile.bestDepth)
+  await reportJourneyEnd(run.journeyId, true, goldThisRun)
   await clearActiveRun(userId)
 
   return {
@@ -482,6 +514,7 @@ export async function extract(
 export async function abandon(userId: T2): Promise<{hud: HudState}> {
   const run = await getActiveRun(userId)
   if (!run.active) throw new GameError('no active run')
+  await reportJourneyEnd(run.journeyId, false, run.gold)
   await clearActiveRun(userId)
   return {hud: {depth: 0, hp: run.hp, gold: 0, wards: run.wards}}
 }

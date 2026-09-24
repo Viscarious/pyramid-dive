@@ -221,14 +221,14 @@
   .banner { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm2); letter-spacing: 0.02em; padding: 7px 18px; border-radius: var(--radius-pill); color: var(--color-bg-parchment-hi); }
   .banner--band { background: var(--color-red-deep); }
   .banner--milestone { background: var(--color-gold-shadow); }
-  .decision-flash-text { font-family: var(--font-display); font-weight: 700; font-size: var(--text-3xl); color: var(--color-gold-shadow); line-height: 1.4; margin: 0 0 10px; }
+  .decision-flash-text { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--color-gold-shadow); line-height: 1.4; margin: 0 0 10px; }
 
   /* height (not a fixed 300px) — shrinks on constrained surfaces, capped at
      the original size on generous ones. flex-shrink so it yields space to
      text/buttons first when the card itself gets tight. */
   .scene-img { width: 100%; height: clamp(150px, 38dvh, 300px); object-fit: cover; border-radius: 16px; margin-bottom: clamp(8px, 2dvh, 18px); flex-shrink: 1; }
   .eyebrow { font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gold-shadow); font-weight: 700; margin-bottom: 6px; }
-  .gold-riding { font-family: var(--font-display); font-weight: 900; font-size: clamp(22px, 5dvh, 36px); color: var(--color-gold-shadow); margin-bottom: clamp(6px, 2dvh, 16px); }
+  .gold-riding { font-family: var(--font-display); font-weight: 900; font-size: clamp(18px, 4dvh, 30px); color: var(--color-gold-shadow); margin-bottom: clamp(6px, 2dvh, 16px); }
   .telegraph-text { font-family: var(--font-display); font-style: italic; font-size: var(--text-xl); line-height: 1.4; margin: 0 0 clamp(8px, 3dvh, 24px); }
   .gamble-prompt { font-size: 17px; line-height: 1.5; margin: 0 0 clamp(8px, 3dvh, 24px); }
   .card-spacer { flex: 1; min-height: 0; }
@@ -503,6 +503,7 @@
         <div class="continue-row">
           <button class="action-btn btn-gold btn-continue" type="button" id="continue-btn"><span class="action-btn-label">Continue</span></button>
         </div>
+        <div class="abandon-link" id="outcome-abandon-link"><button type="button" data-abandon>Abandon this dive</button></div>
       </div>
 
       <!-- ============ DIVE REPORT ============ -->

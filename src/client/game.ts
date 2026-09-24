@@ -444,9 +444,8 @@ function hideAllBanners(): void {
   $('decision-flash').style.display = 'none'
   $('decision-img').style.display = ''
 }
-function showBandBanner(screenPrefix: string, label: string): void {
-  $(`${screenPrefix}-band-banner-text`).textContent =
-    `Threat level up — entering ${label}`
+function showBandBanner(screenPrefix: string): void {
+  $(`${screenPrefix}-band-banner-text`).textContent = 'Threat level up'
   $(`${screenPrefix}-band-banner`).style.display = ''
 }
 function showMilestoneBanner(screenPrefix: string, goldText: number): void {
@@ -474,7 +473,7 @@ function renderEncounter(result: EncounterResult): void {
     $('decision-flash-text').textContent = `You found ${result.amount} gold.`
     $('decision-flash').style.display = ''
     $('decision-img').style.display = 'none'
-    if (result.bandJustChanged) showBandBanner('decision', result.bandLabel)
+    if (result.bandJustChanged) showBandBanner('decision')
     if (result.milestoneHit) showMilestoneBanner('decision', state.gold)
     renderHud()
     showScreen('decision')
@@ -484,7 +483,7 @@ function renderEncounter(result: EncounterResult): void {
     }
   } else if (result.type === 'hazard') {
     $('telegraph-text').textContent = `“${result.telegraphText}”`
-    if (result.bandJustChanged) showBandBanner('hazard', result.bandLabel)
+    if (result.bandJustChanged) showBandBanner('hazard')
     renderHud()
     showScreen('hazard_reveal')
     pendingRevealSound = () => {
@@ -498,7 +497,7 @@ function renderEncounter(result: EncounterResult): void {
     ;($('gamble-img') as HTMLImageElement).src = assets.img
     $('gamble-prompt').textContent = result.promptText
     $('gamble-action-text').textContent = result.actionLabel
-    if (result.bandJustChanged) showBandBanner('gamble', result.bandLabel)
+    if (result.bandJustChanged) showBandBanner('gamble')
     renderHud()
     showScreen('gamble_reveal')
     pendingRevealSound = () => {
@@ -688,6 +687,7 @@ function showOutcome(o: Outcome): void {
   ;($('outcome-img') as HTMLImageElement).src =
     o.img || 'assets/safe-passage.jpg'
   $('outcome-death').style.display = o.fatal ? 'flex' : 'none'
+  $('outcome-abandon-link').style.display = o.fatal ? 'none' : ''
   $('outcome-label').textContent = o.fatal ? '' : o.label
   $('outcome-label').style.color = o.fatal
     ? 'var(--color-red)'

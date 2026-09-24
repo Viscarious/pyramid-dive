@@ -16,6 +16,8 @@ export type ActiveRun = {
   minHp: number
   lastBand: number
   pendingType: PendingType
+  /** Devvit Journeys id for this run, '' if telemetry hasn't started one yet. */
+  journeyId: string
 }
 
 const NO_ACTIVE_RUN: ActiveRun = {
@@ -29,6 +31,7 @@ const NO_ACTIVE_RUN: ActiveRun = {
   minHp: 0,
   lastBand: 0,
   pendingType: null,
+  journeyId: '',
 }
 
 const EMPTY_PROFILE: Profile = {
@@ -60,6 +63,7 @@ export async function getActiveRun(userId: T2): Promise<ActiveRun> {
     minHp: Number(h.minHp),
     lastBand: Number(h.lastBand),
     pendingType: (h.pendingType as PendingType) || null,
+    journeyId: h.journeyId ?? '',
   }
 }
 
@@ -75,6 +79,7 @@ export async function setActiveRun(userId: T2, run: ActiveRun): Promise<void> {
     minHp: String(run.minHp),
     lastBand: String(run.lastBand),
     pendingType: run.pendingType ?? '',
+    journeyId: run.journeyId,
   })
 }
 

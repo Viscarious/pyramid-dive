@@ -12,6 +12,9 @@
     }
   },
   "server": {},
+  "permissions": {
+    "journeys": true
+  },
   "menu": {
     "items": [
       {
