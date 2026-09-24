@@ -1,0 +1,76 @@
+/* Pyramid Dive - design tokens
+   Extracted from the validated Claude Design export (Pyramid Dive.dc.html inline styles).
+   NOTE: the export's design-system folder under _ds is an unused generic starter
+   design system (newsprint/CMYK theme) that shares zero colors or fonts with the
+   actual game - do not source tokens from it. These values come from the game's
+   own inline styles, which is the real source of truth. */
+
+:root {
+  /* --- Core palette --- */
+  --color-bg-sand: #e9d3a0;        /* page/background sand */
+  --color-bg-parchment-lt: #f7ecd0;
+  --color-bg-parchment-hi: #fff6df;
+  --color-bg-cream: #e4d6ac;
+
+  --color-ink: #3b2712;            /* primary text / dark wood */
+  --color-ink-deep: #0a0603;
+
+  --color-gold: #e6ba3f;           /* primary gold accent */
+  --color-gold-hi: #f0c65e;
+  --color-gold-lo: #c1901f;
+  --color-gold-muted: #c9a75f;
+  --color-gold-shadow: #8a6512;    /* gold-button bottom-edge shadow */
+
+  --color-teal: #0b6b73;           /* links / secondary accent */
+  --color-teal-hi: #1aa3ad;
+  --color-teal-deep: #063f45;      /* teal-button bottom-edge shadow */
+
+  --color-red: #c1442d;            /* danger / hazard accent */
+  --color-red-hi: #d95a44;
+  --color-red-deep: #7a2415;       /* red-button bottom-edge shadow */
+  --color-red-shadow: #5c1a10;
+
+  /* --- Type --- */
+  --font-display: 'Cinzel', serif;      /* headings, titles, banners */
+  --font-body: 'Baloo 2', sans-serif;   /* body copy, UI labels, HUD */
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-sm2: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 19px;
+  --text-2xl: 22px;
+  --text-3xl: 24px;
+  --text-4xl: 26px;
+  --text-5xl: 28px;
+  --text-6xl: 44px;
+  --text-7xl: 48px;
+
+  /* --- Radius (pill-shaped buttons are the signature shape) --- */
+  --radius-pill: 999px;
+  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-md2: 14px;
+  --radius-sm: 8px;
+
+  /* --- "Carved button" shadow style — flat bottom-edge shadow, not blur,
+     giving buttons a pressed-stone/carved look. Pair each fill color with
+     its matching *-shadow token below the button. --- */
+  --shadow-gold-edge: 0 1px 0 var(--color-gold-shadow);
+  --shadow-teal-edge: 0 1px 0 var(--color-teal-deep);
+  --shadow-red-edge: 0 1px 0 var(--color-red-deep);
+  --shadow-panel: 0 10px 0 rgba(59,39,18,0.2);
+  --shadow-inset-top: 0 -2px 6px rgba(0,0,0,0.25) inset;
+
+  /* --- Gradients --- */
+  --gradient-splash-scrim: linear-gradient(180deg, rgba(15,9,6,0.25) 0%, rgba(15,9,6,0.8) 100%);
+  --gradient-gold-btn: linear-gradient(180deg, #f0dfa0, var(--color-gold));
+  --gradient-gold-btn-deep: linear-gradient(180deg, var(--color-gold), var(--color-gold-lo));
+  --gradient-teal-btn: linear-gradient(180deg, var(--color-teal-hi), var(--color-teal));
+  --gradient-red-btn: linear-gradient(180deg, var(--color-red-hi), var(--color-red));
+  --gradient-red-btn-deep: linear-gradient(180deg, var(--color-red), #8a2a18);
+  --gradient-panel-dark: linear-gradient(160deg, #2a1210, #160a09);
+}

@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pyramid Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* Uses dvh (dynamic viewport height) instead of vh — Devvit's embed iframe
+     causes bare vh to miscalculate against the outer Reddit chrome. */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100dvh;
+    min-height: 100svh;
+    background: var(--color-bg-sand);
+    font-family: var(--font-body);
+    color: var(--color-ink);
+  }
+  button { font: inherit; cursor: pointer; border: none; background: none; }
+  img { max-width: 100%; display: block; }
+
+  @keyframes torchFlicker {
+    0%, 100% { opacity: 0.75; } 20% { opacity: 0.95; } 35% { opacity: 0.65; }
+    50% { opacity: 0.88; } 65% { opacity: 0.7; } 80% { opacity: 0.92; }
+  }
+  @keyframes glintPulse {
+    0% { opacity: 0.3; transform: scale(0.94); }
+    40% { opacity: 1; transform: scale(1.04); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  .app-shell {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(ellipse 120% 80% at 50% -10%, #f3e2b6 0%, var(--color-bg-sand) 45%, #d9bd85 100%);
+    overflow: hidden;
+  }
+  .stripe { height: 14px; flex-shrink: 0; background: repeating-linear-gradient(135deg, var(--color-teal) 0 10px, var(--color-teal-hi) 10px 20px); }
+  .stripe--top { box-shadow: 0 2px 6px rgba(0,0,0,0.25) inset; }
+  .stripe--bottom { box-shadow: 0 -2px 6px rgba(0,0,0,0.25) inset; }
+  /* Devvit's expanded-but-not-fullscreen surfaces (embedded mobile/desktop
+     post views) give noticeably less real vertical space than a true
+     fullscreen viewport — and dvh doesn't reliably reflect that shortfall
+     inside the embed. Rather than trust a single viewport unit, the decorative
+     stripes are the first thing to go on a constrained surface. */
+  @media (max-height: 600px) { .stripe { display: none; } }
+
+  /* Scrollbar hidden (kept functional) — a visible native scrollbar eats
+     width from one side only, which visibly shifts this centered layout
+     left the moment content is just tall enough to need it. Not desired in
+     a touch-first game UI anyway. */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+  .shell-inner { flex: 1; min-height: 0; display: flex; justify-content: center; padding: clamp(6px, 1.5dvh, 14px) 16px; overflow-y: auto; }
+  .shell-container { width: 100%; max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; position: relative; }
+
+  /* Wraps only the screens area (below HUD) — the descend overlay and
+     hazard-fade bars are scoped to this, not the whole app shell, matching
+     the source's narrower position:relative;overflow:hidden wrapper.
+     flex:1 so the active screen fills exactly the real space available
+     under the HUD, instead of forcing a fixed min-height that can exceed it. */
+  .screens-wrap { position: relative; overflow: hidden; border-radius: 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  /* Descend transition: full-panel near-black wipe within the screens area
+     only. Slides down to cover (750ms), content switches underneath while
+     fully covered, then slides further down and off to reveal (750ms).
+     Used for Enter the Pyramid and Push Deeper. */
+  .descend-overlay {
+    position: absolute; inset: 0; background: #0a0603; z-index: 200;
+    border-radius: 20px; pointer-events: none;
+    transform: translateY(-100%); transition: none;
+  }
+  /* Action fade: four bars (top/bottom by height, left/right by width) that
+     close in from all sides to meet at center, hold in darkness, then open.
+     Used for Ward, Push Unwarded, and Take the Risk. */
+  .hazard-fade-bar {
+    position: absolute; background: #0a0603; z-index: 201;
+    pointer-events: none; transition: none;
+  }
+  .hazard-fade-top { top: 0; left: 0; right: 0; height: 0%; }
+  .hazard-fade-bottom { bottom: 0; left: 0; right: 0; height: 0%; }
+  .hazard-fade-left { top: 0; left: 0; bottom: 0; width: 0%; }
+  .hazard-fade-right { top: 0; right: 0; bottom: 0; width: 0%; }
+
+  /* Sound control + Debug button share the same floating-chrome row */
+  .sound-control {
+    position: absolute; top: -4px; right: 0; z-index: 20;
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(20,12,8,0.55); border-radius: var(--radius-pill);
+    padding: 3px 8px 3px 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .sound-btn { width: 26px; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-pill); color: var(--color-bg-parchment-lt); transition: background 0.15s; }
+  .sound-btn:hover { background: rgba(255,255,255,0.12); }
+  .volume-slider { width: 44px; height: 4px; accent-color: var(--color-gold); cursor: pointer; }
+
+  /* Debug button: dev/QA-only affordance for jumping between screens while
+     the real game logic isn't wired up yet. Left in deliberately for now —
+     flag before shipping if it should be stripped for the real Devvit build. */
+  .debug-btn {
+    position: absolute; top: -4px; left: 0; z-index: 20;
+    background: rgba(20,12,8,0.55); color: var(--color-bg-parchment-lt);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    padding: 6px 12px; border-radius: var(--radius-pill);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .debug-btn:hover { background: rgba(20,12,8,0.75); }
+  .debug-panel { position: absolute; inset: 0; background: rgba(15,9,6,0.72); display: none; align-items: center; justify-content: center; padding: 10px; z-index: 210; }
+  .debug-panel.is-open { display: flex; }
+  .debug-panel-box {
+    background: var(--color-bg-parchment-lt); border: 3px solid var(--color-gold-muted);
+    border-radius: 20px; padding: 16px; max-width: 338px; width: 100%;
+    max-height: 100%; overflow-y: auto;
+  }
+  .debug-panel-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--color-gold-shadow); margin-bottom: 12px; text-align: center; }
+  .debug-panel-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .debug-tab-btn { flex: 1; background: var(--color-bg-cream); color: var(--color-ink); font-size: 12px; font-weight: 700; padding: 8px 4px; border-radius: 8px; opacity: 0.6; }
+  .debug-tab-btn.is-active { opacity: 1; background: var(--color-gold-hi); }
+  .debug-tab-panel { display: none; }
+  .debug-tab-panel.is-active { display: block; }
+  .debug-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .debug-panel-grid--sfx { grid-template-columns: 1fr 1fr; }
+  .debug-jump-btn { background: var(--color-bg-cream); color: var(--color-ink); font-size: 12px; font-weight: 700; padding: 10px 8px; border-radius: 10px; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+  .debug-jump-btn:hover { filter: brightness(1.05); }
+  .debug-close-btn { width: 100%; background: var(--color-ink); color: var(--color-bg-parchment-lt); font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px; }
+
+  /* --- HUD --- */
+  .hud { display: flex; align-items: center; justify-content: space-around; padding: 0 90px clamp(6px, 1.5dvh, 14px); margin-bottom: clamp(6px, 2dvh, 18px); border-bottom: 2px solid rgba(138, 101, 18, 0.25); flex-shrink: 0; }
+  .hud-stat { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .hud-label { font-size: var(--text-xs); letter-spacing: 0.03em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
+  .hud-value { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); white-space: nowrap; }
+  .hud-label--depth { color: var(--color-teal); } .hud-value--depth { color: var(--color-ink); }
+  .hud-label--hp, .hud-value--hp { color: var(--color-red); }
+  .hud-label--gold, .hud-value--gold { color: var(--color-gold-shadow); }
+  .hud-label--wards, .hud-value--wards { color: var(--color-teal); }
+  .hud-value--wards.is-zero { color: #a99568; }
+
+  [data-screen] { display: none !important; }
+  [data-screen].is-active { display: flex !important; flex: 1; min-height: 0; }
+
+  /* ================= HUB ================= */
+  /* max-height (not min-height) — the card fills whatever real space the
+     surface gives it via flex:1 above, capped at the originally-designed
+     size so it doesn't stretch oddly tall on a generous fullscreen viewport. */
+  .hub-card { position: relative; border-radius: 22px; overflow: hidden; max-height: 620px; }
+  .hub-hero-img { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 125%; object-fit: cover; object-position: 50% 50%; }
+  .hub-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(15,9,6,0.12) 0%, rgba(15,9,6,0.12) 24%, rgba(15,9,6,0.5) 70%, rgba(15,9,6,0.68) 100%); pointer-events: none; }
+  .hub-torch { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; animation: torchFlicker 5.2s ease-in-out infinite; }
+  .hub-torch--left { background: radial-gradient(circle at 39.5% 70%, rgba(255,170,60,0.55) 0%, rgba(255,140,40,0.22) 7%, transparent 15%); }
+  .hub-torch--right { background: radial-gradient(circle at 53.8% 70%, rgba(255,170,60,0.55) 0%, rgba(255,140,40,0.22) 7%, transparent 15%); animation-duration: 6.2s; animation-delay: 0.6s; }
+  .hub-content { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; padding: clamp(8px, 2dvh, 16px) 20px; }
+  .hub-title-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .hub-flourish { display: none; }
+  .hub-title { text-align: center; font-family: var(--font-display); font-weight: 900; font-size: clamp(30px, 8vw, var(--text-6xl)); letter-spacing: 0.05em; color: var(--color-gold-hi); text-shadow: 0 2px 0 rgba(0,0,0,0.5), 0 0 26px rgba(0,0,0,0.6); margin: 0 0 8px; }
+  .hub-subtitle { font-size: var(--text-base); font-style: italic; color: var(--color-bg-parchment-lt); opacity: 0.9; text-align: center; margin: 0 0 clamp(8px, 2dvh, 20px); text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+  .hub-flair-row { display: flex; justify-content: center; margin-bottom: clamp(6px, 2dvh, 16px); }
+  .hub-flair-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--color-teal); color: var(--color-bg-parchment-hi); font-size: 12px; font-weight: 700; padding: 4px 14px 4px 5px; border-radius: var(--radius-pill); letter-spacing: 0.04em; }
+  .hub-flair-icon { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; object-fit: contain; }
+  .hub-spacer { flex: 1; }
+  .hub-actions { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 2dvh, 16px); }
+  .btn-enter { display: flex; justify-content: center; align-items: center; min-width: 240px; padding: clamp(12px, 3dvh, 18px) 30px; border-radius: var(--radius-lg); background: var(--gradient-gold-btn-deep); box-shadow: 0 5px 0 var(--color-gold-shadow); color: var(--color-ink); transition: filter 0.15s, transform 0.1s, box-shadow 0.1s; }
+  .btn-enter:hover { filter: brightness(1.06); }
+  .btn-enter:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--color-gold-shadow); }
+  .btn-enter-label { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); letter-spacing: 0.03em; }
+  .btn-enter-label--compact { display: none; }
+  .hub-actions-row { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+  .hub-action-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--gradient-gold-btn-deep); color: var(--color-ink);
+    border-radius: var(--radius-pill); padding: 8px 18px;
+    font-family: var(--font-display); font-weight: 700; font-size: 13px;
+    box-shadow: 0 3px 0 var(--color-gold-shadow);
+    transition: filter 0.15s, transform 0.1s, box-shadow 0.1s;
+  }
+  .hub-action-btn:hover { filter: brightness(1.06); }
+  .hub-action-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-gold-shadow); }
+
+  .hub-stats-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .hub-stat-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: none; padding: 2px 4px;
+    color: rgba(247,236,208,0.75);
+  }
+  .hub-stat-value { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm2); color: rgba(247,236,208,0.9); }
+  .hub-stat-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.8; }
+
+  /* Splash breakpoint — matches the real app's isSplash = innerHeight <= 340.
+     Scoped to Hub's own classes, so it only affects the Hub screen even
+     though the chrome-hiding rules apply regardless of active phase. */
+  @media (max-height: 340px) {
+    .stripe, .hud, .sound-control, .debug-btn, .hub-stats-row, .hub-actions-row { display: none; }
+    .shell-inner { padding: 0; }
+    .hub-card { border-radius: 12px; }
+    .hub-content { justify-content: center; align-items: center; gap: 8px; padding: 14px; }
+    .hub-spacer { display: none; }
+    .hub-flourish { display: block; }
+    .hub-title { font-size: 20px; margin: 0; }
+    .hub-subtitle { font-size: 12px; margin: 0; }
+    .hub-subtitle-line2 { display: none; }
+    .btn-enter { min-width: 0; margin-top: 4px; padding: 10px 28px; border-radius: var(--radius-md2); box-shadow: 0 4px 0 var(--color-gold-shadow); }
+    .btn-enter:active { box-shadow: 0 1px 0 var(--color-gold-shadow); }
+    .btn-enter-label--full { display: none; }
+    .btn-enter-label--compact { display: inline; font-size: var(--text-sm2); }
+  }
+
+  /* ================= GAME SCREENS ================= */
+  /* max-height, same reasoning as .hub-card above. Vertical padding is
+     fluid so short surfaces don't lose real content space to a fixed 24px. */
+  .game-card { border-radius: 20px; padding: clamp(10px, 2dvh, 18px); box-shadow: var(--shadow-panel); text-align: center; max-height: 640px; display: flex; flex-direction: column; background: var(--color-bg-parchment-lt); border: 3px solid var(--color-gold-muted); }
+  .game-card--hazard { border-color: var(--color-red); }
+  .game-card--gamble { border-color: #d9a12b; }
+  .game-card--fatal { background: var(--gradient-panel-dark); border-color: var(--color-red); box-shadow: 0 6px 0 rgba(0,0,0,0.3), 0 0 40px rgba(193,68,45,0.45); }
+
+  .banner-row { width: 100%; display: flex; justify-content: center; margin-bottom: 14px; }
+  .banner { font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm2); letter-spacing: 0.02em; padding: 7px 18px; border-radius: var(--radius-pill); color: var(--color-bg-parchment-hi); }
+  .banner--band { background: var(--color-red-deep); }
+  .banner--milestone { background: var(--color-gold-shadow); }
+  .decision-flash-text { font-family: var(--font-display); font-weight: 700; font-size: var(--text-3xl); color: var(--color-gold-shadow); line-height: 1.4; margin: 0 0 10px; }
+
+  /* height (not a fixed 300px) — shrinks on constrained surfaces, capped at
+     the original size on generous ones. flex-shrink so it yields space to
+     text/buttons first when the card itself gets tight. */
+  .scene-img { width: 100%; height: clamp(150px, 38dvh, 300px); object-fit: cover; border-radius: 16px; margin-bottom: clamp(8px, 2dvh, 18px); flex-shrink: 1; }
+  .eyebrow { font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gold-shadow); font-weight: 700; margin-bottom: 6px; }
+  .gold-riding { font-family: var(--font-display); font-weight: 900; font-size: clamp(22px, 5dvh, 36px); color: var(--color-gold-shadow); margin-bottom: clamp(6px, 2dvh, 16px); }
+  .telegraph-text { font-family: var(--font-display); font-style: italic; font-size: var(--text-xl); line-height: 1.4; margin: 0 0 clamp(8px, 3dvh, 24px); }
+  .gamble-prompt { font-size: 17px; line-height: 1.5; margin: 0 0 clamp(8px, 3dvh, 24px); }
+  .card-spacer { flex: 1; min-height: 0; }
+
+  .action-row { display: flex; gap: 10px; flex-shrink: 0; }
+  .action-btn { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: clamp(10px, 2.5dvh, 16px) 12px; border-radius: 16px; transition: filter 0.15s, transform 0.1s, box-shadow 0.1s; }
+  .action-btn:active { transform: translateY(3px); }
+  .action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+  .action-btn-label { font-weight: 700; font-size: 14px; }
+  .action-btn-sub { opacity: 0.75; font-size: 12px; }
+
+  .btn-teal { background: var(--gradient-teal-btn); box-shadow: 0 4px 0 var(--color-teal-deep); color: var(--color-bg-parchment-lt); }
+  .btn-teal:not(:disabled):hover { filter: brightness(1.08); }
+  .btn-teal:not(:disabled):active { box-shadow: 0 1px 0 var(--color-teal-deep); }
+  .btn-gold { background: var(--gradient-gold-btn-deep); box-shadow: 0 4px 0 var(--color-gold-shadow); color: var(--color-ink); }
+  .btn-gold:hover { filter: brightness(1.06); }
+  .btn-gold:active { box-shadow: 0 1px 0 var(--color-gold-shadow); }
+  .btn-red { background: var(--gradient-red-btn); box-shadow: 0 4px 0 var(--color-red-deep); color: var(--color-bg-parchment-lt); }
+  .btn-red:hover { filter: brightness(1.06); }
+  .btn-red:active { box-shadow: 0 1px 0 var(--color-red-deep); }
+
+  /* Continue: same size/shape as the two-button action rows, just alone
+     and centered, rather than stretched full-width. */
+  .continue-row { display: flex; justify-content: center; }
+  .btn-continue { flex: none; width: auto; min-width: 174px; }
+
+  .abandon-link { text-align: center; margin-top: clamp(10px, 3dvh, 26px); flex-shrink: 0; }
+  .abandon-link button { font-size: 12px; opacity: 0.55; text-decoration: underline; color: var(--color-ink); }
+  .abandon-link button:hover { opacity: 0.8; }
+
+  .death-mark { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: clamp(8px, 2dvh, 18px); }
+  .death-mark svg { filter: drop-shadow(0 0 10px rgba(224,104,79,0.7)); }
+  .death-mark span { font-family: var(--font-display); font-weight: 900; font-size: var(--text-5xl); letter-spacing: 0.03em; color: #f0a58f; text-shadow: 0 0 16px rgba(193,68,45,0.6); }
+  .outcome-label { font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+  .outcome-text { font-size: 17px; line-height: 1.5; margin: 0 0 12px; }
+  .outcome-delta { font-family: var(--font-display); font-weight: 700; font-size: var(--text-3xl); margin-bottom: clamp(8px, 3dvh, 22px); animation: glintPulse 1.4s ease; }
+
+  .modal-overlay { position: absolute; inset: 0; background: rgba(15,9,6,0.72); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 210; }
+
+  /* ================= DIVE REPORT ================= */
+  /* Report/Leaderboard/Relic Shop can be list-heavy (leaderboard rows, relic
+     tiers) — overflow-y:auto is the safety net if a constrained surface
+     can't fit everything even after the card-level fixes above. */
+  .report-wrap { position: relative; padding-top: 46px; display: flex; flex-direction: column; overflow-y: auto; }
+  .report-header { position: absolute; top: -4px; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 90px; }
+  .report-header-label { font-family: var(--font-display); font-weight: 900; font-size: 22px; color: var(--color-gold-shadow); letter-spacing: 0.04em; text-shadow: 1px 1px 0 var(--color-bg-parchment-hi), 2px 2px 0 rgba(59,39,18,0.35); }
+
+  /* ================= LEADERBOARD ================= */
+  .lb-subtitle { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gold-shadow); font-weight: 700; text-align: center; margin-bottom: 8px; opacity: 0.75; }
+  /* Only this region scrolls — the YOU card above and pagination/back
+     button below stay pinned in place regardless of row count. */
+  .lb-scroll { flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 10px; }
+  .lb-rows { display: flex; flex-direction: column; gap: 6px; }
+  .lb-row { display: flex; align-items: center; justify-content: space-between; background: var(--color-bg-parchment-lt); border: 2px solid var(--color-gold-muted); border-radius: 12px; padding: 7px 12px; }
+  .lb-row-left { display: flex; align-items: center; gap: 9px; }
+  .lb-rank { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--color-gold-shadow); width: 22px; }
+  .lb-name { font-size: 13px; font-weight: 400; }
+  .lb-row-right { display: flex; align-items: center; gap: 7px; }
+  .lb-depth-badge { background: var(--color-bg-cream); color: var(--color-ink); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); }
+  .lb-gold { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--color-gold-shadow); }
+  .lb-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 16px; flex-shrink: 0; }
+  .lb-page-btn { width: 28px; height: 28px; border-radius: var(--radius-pill); background: var(--color-bg-cream); color: var(--color-gold-shadow); font-size: 13px; font-weight: 700; }
+  .lb-page-btn:hover:not(:disabled) { filter: brightness(1.05); }
+  .lb-page-btn:disabled { cursor: default; }
+  .lb-page-label { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-gold-shadow); font-weight: 700; opacity: 0.75; }
+  .lb-you-card {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--gradient-gold-btn); border: 3px solid var(--color-gold-shadow);
+    border-radius: 14px; padding: 9px 14px; box-shadow: 0 4px 0 rgba(138,101,18,0.35);
+    margin-bottom: 12px; flex-shrink: 0;
+  }
+  .lb-you-left { display: flex; align-items: center; gap: 10px; }
+  .lb-you-badge { background: var(--color-gold-shadow); color: var(--color-bg-parchment-hi); font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.05em; padding: 4px 10px; border-radius: var(--radius-pill); }
+  .lb-you-rank { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--color-ink); }
+  .lb-you-right { display: flex; align-items: center; gap: 8px; }
+  .lb-you-depth { background: rgba(59,39,18,0.15); color: var(--color-ink); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radius-pill); }
+  .lb-you-gold { font-family: var(--font-display); font-weight: 900; font-size: 16px; color: var(--color-ink); }
+  .lb-back-btn {
+    width: 100%; padding: 14px 18px; border-radius: 16px;
+    background: var(--gradient-teal-btn); box-shadow: 0 4px 0 var(--color-teal-deep);
+    color: var(--color-bg-parchment-lt); font-weight: 700; font-size: 14px;
+    display: flex; justify-content: center; align-items: center;
+    flex-shrink: 0;
+    transition: filter 0.15s, transform 0.1s, box-shadow 0.1s;
+  }
+  .lb-back-btn:hover { filter: brightness(1.08); }
+  .lb-back-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-teal-deep); }
+
+  /* ================= RELIC SHOP ================= */
+  .rs-subtitle { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gold-shadow); font-weight: 700; text-align: center; margin-bottom: 18px; opacity: 0.75; }
+  .rs-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
+  .rs-row { display: flex; align-items: center; justify-content: space-between; background: var(--color-bg-parchment-lt); border: 2px solid var(--color-gold-muted); border-radius: 12px; padding: 7px 12px; flex-shrink: 0; }
+  .rs-row--equipped { background: #f0e0be; }
+  .rs-row-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .rs-icon { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; object-fit: contain; background: rgba(59,39,18,0.06); }
+  .rs-name-block { font-size: 13px; font-weight: 600; min-width: 0; }
+  .rs-tier-label { display: block; font-size: 10px; opacity: 0.5; font-weight: 400; }
+  .rs-action-btn { padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 10px; flex-shrink: 0; transition: filter 0.15s, transform 0.1s, box-shadow 0.1s; }
+  .rs-action-btn:active { transform: translateY(2px); }
+  .rs-btn-unequip { background: var(--gradient-red-btn-deep); box-shadow: 0 2px 0 var(--color-red-shadow); color: var(--color-bg-parchment-hi); }
+  .rs-btn-unequip:hover { filter: brightness(1.08); }
+  .rs-btn-unequip:active { box-shadow: 0 0 0 var(--color-red-shadow); }
+  .rs-btn-equip { background: var(--gradient-teal-btn); box-shadow: 0 2px 0 var(--color-teal-deep); color: var(--color-bg-parchment-lt); }
+  .rs-btn-equip:active { box-shadow: 0 0 0 var(--color-teal-deep); }
+  .rs-btn-buy { background: var(--gradient-gold-btn-deep); box-shadow: 0 2px 0 var(--color-gold-shadow); color: var(--color-ink); }
+  .rs-btn-buy:active { box-shadow: 0 0 0 var(--color-gold-shadow); }
+  .rs-btn-buy:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+  .report-headline { font-family: var(--font-display); font-size: 19px; line-height: 1.4; font-weight: 700; margin: 0 0 12px; text-align: center; }
+  .report-highlight { font-size: 14px; line-height: 1.5; margin-bottom: 4px; text-align: center; }
+  .report-stats { background: var(--color-bg-parchment-lt); border: 2px solid var(--color-gold-muted); border-radius: 18px; padding: 6px 18px; margin: 18px 0 24px; }
+  .report-stat-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(138,101,18,0.2); font-size: 14px; }
+  .report-stat-row:last-child { border-bottom: none; }
+  .report-stat-row span:last-child { font-weight: 700; }
+  .report-actions-row1 { display: flex; gap: 10px; margin-bottom: 10px; }
+  .report-actions-row1 .report-btn { flex: 1; }
+  .report-actions-row2 .report-btn { width: 100%; }
+  .report-btn { padding: 13px 14px; border-radius: 14px; font-weight: 700; font-size: 13px; display: flex; justify-content: center; align-items: center; text-align: center; transition: filter 0.15s, transform 0.1s, box-shadow 0.1s; }
+  .report-btn:active { transform: translateY(2px); }
+  .report-btn--teal { background: var(--gradient-teal-btn); box-shadow: 0 3px 0 var(--color-teal-deep); color: var(--color-bg-parchment-lt); }
+  .report-btn--teal:hover { filter: brightness(1.08); }
+  .report-btn--teal:active { box-shadow: 0 1px 0 var(--color-teal-deep); }
+  .report-btn--gold { background: var(--gradient-gold-btn-deep); box-shadow: 0 3px 0 var(--color-gold-shadow); color: var(--color-ink); }
+  .report-btn--gold:hover { filter: brightness(1.06); }
+  .report-btn--gold:active { box-shadow: 0 1px 0 var(--color-gold-shadow); }
+  .share-note { text-align: center; margin-top: 14px; }
+  .share-note span { background: var(--color-teal); color: var(--color-bg-parchment-hi); font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: var(--radius-pill); }
+  .modal-box { background: var(--color-bg-parchment-lt); border: 3px solid var(--color-gold-muted); border-radius: 20px; padding: 26px 24px; max-width: 340px; box-shadow: 0 10px 0 rgba(59,39,18,0.2); text-align: center; }
+  .modal-title { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--color-gold-shadow); margin-bottom: 10px; }
+  .modal-body { font-size: 14px; line-height: 1.5; margin: 0 0 20px; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-actions button { flex: 1; padding: 13px 14px; border-radius: 14px; font-weight: 700; font-size: 13px; }
+  .modal-btn-keep { background: var(--color-bg-cream); color: var(--color-ink); }
+  .modal-btn-keep:hover { filter: brightness(1.04); }
+  .modal-btn-abandon { background: var(--gradient-red-btn-deep); box-shadow: 0 3px 0 var(--color-red-shadow); color: var(--color-bg-parchment-hi); }
+  .modal-btn-abandon:hover { filter: brightness(1.06); }
+  .modal-btn-abandon:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-red-shadow); }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="stripe stripe--top"></div>
+
+  <div class="shell-inner no-scrollbar">
+    <div class="shell-container">
+
+      <button class="debug-btn" type="button" id="debug-open-btn">DEBUG</button>
+
+      <div class="sound-control">
+        <button class="sound-btn" type="button" aria-label="Toggle mute" id="mute-btn">
+          <svg id="icon-sound-on" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 9 8 9 12 5 12 19 8 15 4 15 4 9"></polygon><path d="M16 8.5a4.5 4.5 0 0 1 0 7"></path><path d="M18.5 6a8 8 0 0 1 0 12"></path></svg>
+          <svg id="icon-sound-off" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="4 9 8 9 12 5 12 19 8 15 4 15 4 9"></polygon><line x1="22" y1="9" x2="16" y2="15"></line><line x1="16" y1="9" x2="22" y2="15"></line></svg>
+        </button>
+        <input class="volume-slider" type="range" min="0" max="100" value="50" aria-label="Volume" id="volume-slider">
+      </div>
+
+      <!-- HUD (hub + all in-run screens) -->
+      <div class="hud" id="hud-normal">
+        <div class="hud-stat"><span class="hud-label hud-label--depth">Depth</span><span class="hud-value hud-value--depth" id="stat-depth">0</span></div>
+        <div class="hud-stat"><span class="hud-label hud-label--hp">HP</span><span class="hud-value hud-value--hp" id="stat-hp">5</span></div>
+        <div class="hud-stat"><span class="hud-label hud-label--gold">Gold</span><span class="hud-value hud-value--gold" id="stat-gold">0</span></div>
+        <div class="hud-stat"><span class="hud-label hud-label--wards">Wards</span><span class="hud-value hud-value--wards" id="stat-wards">3</span></div>
+      </div>
+      <div class="hud" id="hud-hub" style="display:none;">
+        <div class="hud-stat"><span class="hud-label hud-label--gold">Banked</span><span class="hud-value hud-value--gold" id="hud-hub-banked">0</span></div>
+        <div class="hud-stat"><span class="hud-label hud-label--depth">Best</span><span class="hud-value hud-value--depth" id="hud-hub-best">0</span></div>
+      </div>
+
+      <div class="screens-wrap">
+
+      <!-- ============ HUB ============ -->
+      <div class="hub-card" data-screen="hub">
+        <img class="hub-hero-img" src="assets/hub-pyramid-hero.jpg" alt="Pyramid entrance at dusk">
+        <div class="hub-scrim"></div>
+        <div class="hub-torch hub-torch--left"></div>
+        <div class="hub-torch hub-torch--right"></div>
+        <div class="hub-content">
+          <div class="hub-title-row">
+            <svg class="hub-flourish" width="15" height="18" viewBox="0 0 24 28" fill="#c1442d"><path d="M12 1 C9 6 6 10 6 15 C6 19 9 22 8 27 C13 24 14 20 14 15 C14 11 15 8 12 1Z"/></svg>
+            <h1 class="hub-title">PYRAMID DIVE</h1>
+            <svg class="hub-flourish" width="15" height="18" viewBox="0 0 24 28" fill="#c1442d"><path d="M12 1 C9 6 6 10 6 15 C6 19 9 22 8 27 C13 24 14 20 14 15 C14 11 15 8 12 1Z"/></svg>
+          </div>
+          <p class="hub-subtitle">A push-your-luck descent into the tomb.<span class="hub-subtitle-line2"><br>How deep before the curse catches you?</span></p>
+
+          <div class="hub-flair-row" id="hub-flair-row" style="display:none;">
+            <span class="hub-flair-pill">
+              <img class="hub-flair-icon" id="hub-flair-icon" src="" alt="">
+              <span id="hub-flair-label">Relic</span>
+            </span>
+          </div>
+          <div class="hub-spacer"></div>
+          <div class="hub-actions">
+            <button class="btn-enter" type="button" id="enter-pyramid-btn">
+              <span class="btn-enter-label btn-enter-label--full">ENTER THE PYRAMID</span>
+              <span class="btn-enter-label btn-enter-label--compact">PLAY</span>
+            </button>
+            <div class="hub-actions-row">
+              <button class="hub-action-btn" type="button" aria-label="Leaderboard" id="leaderboard-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"></path><path d="M7 5H4a2 2 0 0 0 0 4h1"></path><path d="M17 5h3a2 2 0 0 1 0 4h-1"></path></svg>
+                <span>Rank</span>
+              </button>
+              <button class="hub-action-btn" type="button" aria-label="Relic Shop" id="relic-shop-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M8.2 13.5 6 22l6-3 6 3-2.2-8.5"></path></svg>
+                <span>Shop</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ DECISION ============ -->
+      <div class="game-card" data-screen="decision">
+        <div class="banner-row" id="decision-band-banner" style="display:none;"><span class="banner banner--band" id="decision-band-banner-text"></span></div>
+        <div class="banner-row" id="decision-milestone-banner" style="display:none;"><span class="banner banner--milestone" id="decision-milestone-banner-text"></span></div>
+        <div id="decision-flash" style="display:none;">
+          <img class="scene-img" id="decision-flash-img" src="assets/gold-small.jpg" alt="Gold found">
+          <p class="decision-flash-text" id="decision-flash-text">You found 5 gold.</p>
+        </div>
+        <img class="scene-img" id="decision-img" src="assets/safe-passage.jpg" alt="Passage deeper into the tomb">
+        <div class="eyebrow">Riding on this run</div>
+        <div class="gold-riding" id="decision-gold">0</div>
+        <div class="card-spacer"></div>
+        <div class="action-row">
+          <button class="action-btn btn-teal" type="button" id="push-deeper-btn"><span class="action-btn-label">Push Deeper</span></button>
+          <button class="action-btn btn-gold" type="button" id="extract-btn"><span class="action-btn-label">Extract Now</span></button>
+        </div>
+        <div class="abandon-link"><button type="button" data-abandon>Abandon this dive</button></div>
+      </div>
+
+      <!-- ============ HAZARD TELEGRAPH ============ -->
+      <div class="game-card game-card--hazard" data-screen="hazard_reveal">
+        <div class="banner-row" id="hazard-band-banner" style="display:none;"><span class="banner banner--band" id="hazard-band-banner-text"></span></div>
+        <img class="scene-img" src="assets/hazard-mystery.jpg" alt="A dim, uncertain corridor">
+        <p class="telegraph-text" id="telegraph-text">&ldquo;A faint hiss echoes from the dark.&rdquo;</p>
+        <div class="card-spacer"></div>
+        <div class="action-row">
+          <button class="action-btn btn-teal" type="button" id="ward-btn">
+            <span class="action-btn-label">Use a Ward</span><span class="action-btn-sub" id="wards-left-text">3 remaining</span>
+          </button>
+          <button class="action-btn btn-gold" type="button" id="push-unwarded-btn">
+            <span class="action-btn-label">Push On Unwarded</span><span class="action-btn-sub" aria-hidden="true">&nbsp;</span>
+          </button>
+        </div>
+        <div class="abandon-link"><button type="button" data-abandon>Abandon this dive</button></div>
+      </div>
+
+      <!-- ============ GAMBLE REVEAL ============ -->
+      <div class="game-card game-card--gamble" data-screen="gamble_reveal">
+        <div class="banner-row" id="gamble-band-banner" style="display:none;"><span class="banner banner--band" id="gamble-band-banner-text"></span></div>
+        <img class="scene-img" id="gamble-img" src="assets/gamble-urn.jpg" alt="A sealed urn">
+        <p class="gamble-prompt" id="gamble-prompt">A cracked urn sits in an alcove. Something glints inside.</p>
+        <div class="card-spacer"></div>
+        <div class="action-row">
+          <button class="action-btn btn-red" type="button" id="gamble-risk-btn"><span class="action-btn-label" id="gamble-action-text">Take the Risk</span></button>
+          <button class="action-btn btn-gold" type="button" id="gamble-leave-btn"><span class="action-btn-label">Leave It</span></button>
+        </div>
+        <div class="abandon-link"><button type="button" data-abandon>Abandon this dive</button></div>
+      </div>
+
+      <!-- ============ OUTCOME ============ -->
+      <div class="game-card" data-screen="outcome" id="outcome-card">
+        <div class="banner-row" id="outcome-milestone-banner" style="display:none;"><span class="banner banner--milestone" id="outcome-milestone-banner-text"></span></div>
+        <img class="scene-img" id="outcome-img" src="assets/safe-passage.jpg" alt="">
+        <div id="outcome-death" class="death-mark" style="display:none;">
+          <svg width="34" height="42" viewBox="0 0 24 24" fill="none" stroke="#e0684f" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="7" r="4"/><line x1="12" y1="11" x2="9" y2="16"/><line x1="12" y1="11" x2="10" y2="22"/><line x1="7" y1="15" x2="17" y2="15"/></svg>
+          <span>YOU DIED</span>
+        </div>
+        <div class="outcome-label" id="outcome-label">Warded</div>
+        <p class="outcome-text" id="outcome-text">The dart clatters harmlessly off your ward.</p>
+        <div class="outcome-delta" id="outcome-delta" style="display:none;">-3 HP</div>
+        <div class="card-spacer"></div>
+        <div class="continue-row">
+          <button class="action-btn btn-gold btn-continue" type="button" id="continue-btn"><span class="action-btn-label">Continue</span></button>
+        </div>
+      </div>
+
+      <!-- ============ DIVE REPORT ============ -->
+      <div class="report-wrap no-scrollbar" data-screen="report">
+        <div class="report-header"><span class="report-header-label">Dive Report</span></div>
+        <p class="report-headline" id="report-headline">Extracted at depth 3 with 12 gold.</p>
+        <div id="report-highlights"></div>
+
+        <div class="report-stats">
+          <div class="report-stat-row"><span>Depth reached</span><span id="report-depth">0</span></div>
+          <div class="report-stat-row"><span>Hazards faced</span><span id="report-hazards-faced">0</span></div>
+          <div class="report-stat-row"><span>Wards used</span><span id="report-wards-used">0 / 3</span></div>
+          <div class="report-stat-row"><span>Total banked gold</span><span id="report-banked">0</span></div>
+          <div class="report-stat-row"><span>Best single-run haul</span><span id="report-best-haul">0</span></div>
+        </div>
+
+        <div class="report-actions-row1">
+          <button class="report-btn report-btn--teal" type="button" id="report-share-btn">Share Dive Report</button>
+          <button class="report-btn report-btn--teal" type="button" id="report-leaderboard-btn">View Leaderboard</button>
+          <button class="report-btn report-btn--teal" type="button" id="report-hub-btn">Return to Hub</button>
+        </div>
+        <div class="report-actions-row2">
+          <button class="report-btn report-btn--gold" type="button" id="report-new-run-btn">Start a New Run</button>
+        </div>
+        <div class="share-note" id="share-note" style="display:none;"><span>Share text copied — paste it into your dive comment</span></div>
+      </div>
+
+      <!-- ============ LEADERBOARD ============ -->
+      <div class="report-wrap no-scrollbar" data-screen="leaderboard">
+        <div class="report-header"><span class="report-header-label">Leaderboard</span></div>
+        <p class="lb-subtitle">r/PyramidDive &middot; all-time &middot; biggest single haul</p>
+
+        <div class="lb-you-card" id="lb-you-card" style="display:none;">
+          <div class="lb-you-left">
+            <span class="lb-you-badge">YOU</span>
+            <span class="lb-you-rank" id="lb-you-rank">Rank #1</span>
+          </div>
+          <div class="lb-you-right">
+            <span class="lb-you-depth" id="lb-you-depth">depth 0</span>
+            <span class="lb-you-gold" id="lb-you-gold">0g</span>
+          </div>
+        </div>
+
+        <div class="lb-scroll no-scrollbar">
+          <div class="lb-rows" id="lb-rows"></div>
+        </div>
+
+        <div class="lb-pagination">
+          <button class="lb-page-btn" type="button" id="lb-prev-btn" aria-label="Previous ranks">&lsaquo;</button>
+          <span class="lb-page-label" id="lb-page-label">Page 1 of 1</span>
+          <button class="lb-page-btn" type="button" id="lb-next-btn" aria-label="More ranks">&rsaquo;</button>
+        </div>
+
+        <button class="lb-back-btn" type="button" id="lb-back-btn">Back to Hub</button>
+      </div>
+
+      <!-- ============ RELIC SHOP ============ -->
+      <div class="report-wrap no-scrollbar" data-screen="relic_shop">
+        <div class="report-header"><span class="report-header-label">Relic Shop</span></div>
+        <p class="rs-subtitle" id="rs-banked">banked: 0g</p>
+
+        <div class="rs-rows no-scrollbar" id="rs-rows"></div>
+
+        <button class="lb-back-btn" type="button" id="rs-back-btn">Back to Hub</button>
+      </div>
+
+      <div class="descend-overlay" id="descend-overlay"></div>
+      <div class="hazard-fade-bar hazard-fade-top" id="hazard-fade-top"></div>
+      <div class="hazard-fade-bar hazard-fade-bottom" id="hazard-fade-bottom"></div>
+      <div class="hazard-fade-bar hazard-fade-left" id="hazard-fade-left"></div>
+      <div class="hazard-fade-bar hazard-fade-right" id="hazard-fade-right"></div>
+
+      <!-- Extract confirm modal -->
+      <div class="modal-overlay" id="extract-modal" style="display:none;">
+        <div class="modal-box">
+          <div class="modal-title">Extract with <span id="extract-modal-gold">0</span> gold?</div>
+          <p class="modal-body">You'll bank what you've found and end this dive. There's no undoing this.</p>
+          <div class="modal-actions">
+            <button class="modal-btn-keep" type="button" id="extract-modal-keep-btn">Keep Diving</button>
+            <button class="modal-btn-abandon" style="background: var(--gradient-gold-btn-deep); box-shadow: 0 3px 0 var(--color-gold-shadow); color: var(--color-ink);" type="button" id="extract-modal-confirm-btn">Extract Now</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Abandon confirm modal -->
+      <div class="modal-overlay" id="abandon-modal" style="display:none;">
+        <div class="modal-box">
+          <div class="modal-title">Abandon this dive?</div>
+          <p class="modal-body">You'll lose all <span id="modal-gold">0</span> gold riding on this run. There's no undoing this.</p>
+          <div class="modal-actions">
+            <button class="modal-btn-keep" type="button" id="modal-keep-btn">Keep Diving</button>
+            <button class="modal-btn-abandon" type="button" id="modal-abandon-btn">Abandon</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Debug: jump to any screen/state, test SFX, grant gold for QA -->
+      <div class="debug-panel" id="debug-panel">
+        <div class="debug-panel-box">
+          <div class="debug-panel-tabs">
+            <button class="debug-tab-btn is-active" data-tab="screens" type="button">Screens</button>
+            <button class="debug-tab-btn" data-tab="sfx" type="button">SFX</button>
+            <button class="debug-tab-btn" data-tab="gold" type="button">Gold</button>
+          </div>
+
+          <div class="debug-tab-panel is-active" data-tab-panel="screens">
+            <div class="debug-panel-grid">
+              <button class="debug-jump-btn" data-jump="hub">Hub</button>
+              <button class="debug-jump-btn" data-jump="decision">Decision</button>
+              <button class="debug-jump-btn" data-jump="hazard_reveal">Hazard Telegraph</button>
+              <button class="debug-jump-btn" data-jump="gamble_reveal">Gamble Reveal</button>
+              <button class="debug-jump-btn" data-jump="outcome_safe">Outcome: Safe</button>
+              <button class="debug-jump-btn" data-jump="outcome_damage">Outcome: Damage</button>
+              <button class="debug-jump-btn" data-jump="outcome_gold">Outcome: Gold</button>
+              <button class="debug-jump-btn" data-jump="outcome_fatal">Outcome: Fatal</button>
+              <button class="debug-jump-btn" data-jump="report_extracted">Report: Extracted</button>
+              <button class="debug-jump-btn" data-jump="report_died">Report: Died</button>
+              <button class="debug-jump-btn" data-jump="leaderboard">Leaderboard</button>
+              <button class="debug-jump-btn" data-jump="relic_shop">Relic Shop</button>
+            </div>
+          </div>
+
+          <div class="debug-tab-panel" data-tab-panel="sfx">
+            <div class="debug-panel-grid debug-panel-grid--sfx" id="debug-sfx-grid"></div>
+          </div>
+
+          <div class="debug-tab-panel" data-tab-panel="gold">
+            <div class="debug-panel-grid">
+              <button class="debug-jump-btn" data-gold="10">+10 Banked</button>
+              <button class="debug-jump-btn" data-gold="50">+50 Banked</button>
+              <button class="debug-jump-btn" data-gold="100">+100 Banked</button>
+              <button class="debug-jump-btn" data-gold="clear">Clear Riding</button>
+              <button class="debug-jump-btn" data-gold="banked-clear">Clear Banked</button>
+              <button class="debug-jump-btn" data-gold="full-hp">Full HP</button>
+            </div>
+          </div>
+
+          <button class="debug-close-btn" type="button" id="debug-close-btn">Close</button>
+        </div>
+      </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="stripe stripe--bottom"></div>
+</div>
+
+
+<script src="game.js" type="module"></script>
+
+</body>
+</html>

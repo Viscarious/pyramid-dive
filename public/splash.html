@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pyramid Dive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Baloo+2:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="tokens.css">
+    <link rel="modulepreload" href="splash.js">
+    <style>
+    /* Compact splash surface — this file IS Devvit's inline/collapsed post
+     entrypoint (post.entrypoints.default in devvit.json), shown at REGULAR
+     (~320px) or TALL (~512px) inline post height before the player taps in.
+     It mirrors the source client's `@media (max-height: 340px)` compact-Hub
+     styling, ported here as its own always-compact page per Devvit's real
+     splash/expanded entrypoint split (see CLAUDE_CODE_PROMPT.md item 1).
+     dvh/svh, not vh — bare vh miscalculates inside Devvit's embed iframe. */
+    * {
+      box-sizing: border-box;
+    }
+    html,
+    body {
+      margin: 0;
+      width: 100dvw;
+      height: 100dvh;
+      min-height: 100svh;
+      overflow: hidden;
+      background: var(--color-bg-sand);
+      font-family: var(--font-body);
+    }
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      background: none;
+    }
+
+    @keyframes torchFlicker {
+      0%,
+      100% {
+        opacity: 0.75;
+      }
+      20% {
+        opacity: 0.95;
+      }
+      35% {
+        opacity: 0.65;
+      }
+      50% {
+        opacity: 0.88;
+      }
+      65% {
+        opacity: 0.7;
+      }
+      80% {
+        opacity: 0.92;
+      }
+    }
+
+    .splash-card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .splash-hero-img {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      width: 100%;
+      height: 125%;
+      object-fit: cover;
+      object-position: 50% 50%;
+    }
+    .splash-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--gradient-splash-scrim);
+      pointer-events: none;
+    }
+    .splash-torch {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      animation: torchFlicker 5.2s ease-in-out infinite;
+    }
+    .splash-torch--left {
+      background: radial-gradient(
+        circle at 39.5% 70%,
+        rgba(255, 170, 60, 0.55) 0%,
+        rgba(255, 140, 40, 0.22) 7%,
+        transparent 15%
+      );
+    }
+    .splash-torch--right {
+      background: radial-gradient(
+        circle at 53.8% 70%,
+        rgba(255, 170, 60, 0.55) 0%,
+        rgba(255, 140, 40, 0.22) 7%,
+        transparent 15%
+      );
+      animation-duration: 6.2s;
+      animation-delay: 0.6s;
+    }
+
+    .splash-content {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px;
+    }
+    .splash-flourish-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .splash-title {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 20px;
+      letter-spacing: 0.05em;
+      color: var(--color-gold-hi);
+      margin: 0;
+      text-shadow:
+        0 2px 0 rgba(0, 0, 0, 0.5),
+        0 0 26px rgba(0, 0, 0, 0.6);
+    }
+    .splash-subtitle {
+      font-size: 12px;
+      font-style: italic;
+      color: var(--color-bg-parchment-lt);
+      opacity: 0.9;
+      text-align: center;
+      margin: 0;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    }
+    #start-btn {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 4px;
+      padding: 10px 28px;
+      border-radius: var(--radius-md2);
+      background: var(--gradient-gold-btn-deep);
+      box-shadow: 0 4px 0 var(--color-gold-shadow);
+      color: var(--color-ink);
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.03em;
+      transition:
+        filter 0.15s,
+        transform 0.1s,
+        box-shadow 0.1s;
+    }
+    #start-btn:hover {
+      filter: brightness(1.06);
+    }
+    #start-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 var(--color-gold-shadow);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="splash-card">
+      <img
+        class="splash-hero-img"
+        src="assets/hub-pyramid-hero.jpg"
+        alt="Pyramid entrance at dusk"
+      >
+      <div class="splash-scrim"></div>
+      <div class="splash-torch splash-torch--left"></div>
+      <div class="splash-torch splash-torch--right"></div>
+      <div class="splash-content">
+        <div class="splash-flourish-row">
+          <svg
+            width="15"
+            height="18"
+            viewBox="0 0 24 28"
+            fill="#c1442d"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 1 C9 6 6 10 6 15 C6 19 9 22 8 27 C13 24 14 20 14 15 C14 11 15 8 12 1Z"
+            />
+          </svg>
+          <h1 class="splash-title">PYRAMID DIVE</h1>
+          <svg
+            width="15"
+            height="18"
+            viewBox="0 0 24 28"
+            fill="#c1442d"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 1 C9 6 6 10 6 15 C6 19 9 22 8 27 C13 24 14 20 14 15 C14 11 15 8 12 1Z"
+            />
+          </svg>
+        </div>
+        <p class="splash-subtitle">A push-your-luck descent into the tomb.</p>
+        <button id="start-btn" type="button">PLAY</button>
+      </div>
+    </div>
+    <script src="splash.js" type="module"></script>
+  </body>
+</html>
