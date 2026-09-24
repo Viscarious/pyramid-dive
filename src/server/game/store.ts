@@ -210,3 +210,27 @@ export async function setRelics(
     equipped: relics.equipped === null ? '' : String(relics.equipped),
   })
 }
+
+// ---- Per-user mutex ----
+// Every mutating action here does read-Redis -> check -> modify -> write,
+// which is not atomic. Without this, a client firing concurrent requests
+// (e.g. two simultaneous extracts) can win the same race twice — read the
+// same starting balance before either write lands, and both compute a
+// result as if they were the only one running. This lock serializes a
+// single user's mutating actions so that can't happen. A short TTL is the
+// safety net if a request dies between acquiring and releasing.
+const LOCK_TTL_SECONDS = 10
+
+function lockKey(userId: T2): string {
+  return `lock:${userId}`
+}
+
+export async function acquireUserLock(userId: T2): Promise<boolean> {
+  const acquired = await redis.hSetNX(lockKey(userId), 'locked', '1')
+  if (acquired) await redis.expire(lockKey(userId), LOCK_TTL_SECONDS)
+  return acquired === 1
+}
+
+export async function releaseUserLock(userId: T2): Promise<void> {
+  await redis.del(lockKey(userId))
+}

@@ -71,9 +71,15 @@ export async function onReq(
       writeJson<ErrorRsp>(409, {error: err.message, status: 409}, rspMsg)
       return
     }
-    const msg = `server error; ${err instanceof Error ? err.stack : err}`
-    console.error(msg)
-    writeJson<ErrorRsp>(500, {error: msg, status: 500}, rspMsg)
+    // Full detail (stack trace, internals) stays server-side in the log —
+    // sending it back in the response body would leak implementation
+    // details to the client.
+    console.error(`server error; ${err instanceof Error ? err.stack : err}`)
+    writeJson<ErrorRsp>(
+      500,
+      {error: 'internal server error', status: 500},
+      rspMsg,
+    )
   }
 }
 
@@ -187,9 +193,22 @@ async function route(
 // client's window.onerror/unhandledrejection handlers (game.ts, splash.ts)
 // post here so client bugs actually surface during development instead of
 // failing silently.
+const CLIENT_ERROR_FIELD_MAX = 4000
+
+function truncate(s: string): string {
+  return s.length > CLIENT_ERROR_FIELD_MAX
+    ? `${s.slice(0, CLIENT_ERROR_FIELD_MAX)}… (truncated)`
+    : s
+}
+
 async function routeClientError(reqMsg: IncomingMessage): Promise<OkRsp> {
   const req = await readJson<ClientErrorReq>(reqMsg)
-  console.error(`client error [${req.source}]: ${req.message}\n${req.stack}`)
+  // Truncated defensively — this endpoint takes arbitrary client-supplied
+  // text with no other validation, so nothing stops a spammy/malicious
+  // client from posting oversized garbage repeatedly.
+  console.error(
+    `client error [${truncate(req.source)}]: ${truncate(req.message)}\n${truncate(req.stack)}`,
+  )
   return {ok: true}
 }
 

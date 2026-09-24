@@ -847,15 +847,31 @@ async function loadLeaderboardPage(): Promise<void> {
   rsp.rows.forEach(row => {
     const div = document.createElement('div')
     div.className = 'lb-row'
-    div.innerHTML = `
-      <div class="lb-row-left">
-        <span class="lb-rank">#${row.rank}</span>
-        <span class="lb-name">${row.username}</span>
-      </div>
-      <div class="lb-row-right">
-        <span class="lb-depth-badge">depth ${row.depth}</span>
-        <span class="lb-gold">${row.gold}g</span>
-      </div>`
+
+    const left = document.createElement('div')
+    left.className = 'lb-row-left'
+    const rank = document.createElement('span')
+    rank.className = 'lb-rank'
+    rank.textContent = `#${row.rank}`
+    const name = document.createElement('span')
+    name.className = 'lb-name'
+    // Reddit usernames are unlikely to carry HTML-special characters, but
+    // this is externally-sourced text either way — build the DOM directly
+    // rather than interpolating it into innerHTML.
+    name.textContent = row.username
+    left.append(rank, name)
+
+    const right = document.createElement('div')
+    right.className = 'lb-row-right'
+    const depth = document.createElement('span')
+    depth.className = 'lb-depth-badge'
+    depth.textContent = `depth ${row.depth}`
+    const gold = document.createElement('span')
+    gold.className = 'lb-gold'
+    gold.textContent = `${row.gold}g`
+    right.append(depth, gold)
+
+    div.append(left, right)
     rowsEl.appendChild(div)
   })
 

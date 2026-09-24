@@ -24,6 +24,7 @@ import {relicTier} from './relics.ts'
 import {dailySeed, rollIndex, rollInt, rollPercent, todayUtc} from './rng.ts'
 import {
   type ActiveRun,
+  acquireUserLock,
   clearActiveRun,
   getActiveRun,
   getLeaderboardCount,
@@ -31,6 +32,7 @@ import {
   getLeaderboardRank,
   getProfile,
   getRelics,
+  releaseUserLock,
   setActiveRun,
   setProfile,
   setRelics,
@@ -45,6 +47,27 @@ import {
 } from './telemetry.ts'
 
 export class GameError extends Error {}
+
+// Every mutating action below does read-Redis -> check -> modify -> write,
+// which isn't atomic on its own — see store.ts's acquireUserLock for what
+// that opens up (concurrent requests double-crediting the same gold, etc.)
+// and why this wrapper exists. Every exported mutating function is wrapped
+// with this before it's used anywhere.
+function withUserLock<A extends unknown[], R>(
+  fn: (userId: T2, ...args: A) => Promise<R>,
+): (userId: T2, ...args: A) => Promise<R> {
+  return async (userId, ...args) => {
+    const acquired = await acquireUserLock(userId)
+    if (!acquired) {
+      throw new GameError('another action is already in progress — try again')
+    }
+    try {
+      return await fn(userId, ...args)
+    } finally {
+      await releaseUserLock(userId)
+    }
+  }
+}
 
 function hud(run: ActiveRun): HudState {
   return {
@@ -231,7 +254,7 @@ async function removeFlair(
   }
 }
 
-export async function buyRelic(
+async function buyRelicImpl(
   userId: T2,
   username: string,
   subredditName: string,
@@ -258,7 +281,7 @@ export async function buyRelic(
   return {relics, banked: profile.banked}
 }
 
-export async function equipRelic(
+async function equipRelicImpl(
   userId: T2,
   username: string,
   subredditName: string,
@@ -277,7 +300,7 @@ export async function equipRelic(
   return {relics, banked: profile.banked}
 }
 
-export async function unequipRelic(
+async function unequipRelicImpl(
   userId: T2,
   username: string,
   subredditName: string,
@@ -292,6 +315,10 @@ export async function unequipRelic(
 
   return {relics, banked: profile.banked}
 }
+
+export const buyRelic = withUserLock(buyRelicImpl)
+export const equipRelic = withUserLock(equipRelicImpl)
+export const unequipRelic = withUserLock(unequipRelicImpl)
 
 const LEADERBOARD_PAGE_SIZE = 10
 
@@ -327,7 +354,7 @@ export async function getLeaderboard(
   }
 }
 
-export async function enterPyramid(userId: T2): Promise<EncounterResult> {
+async function enterPyramidImpl(userId: T2): Promise<EncounterResult> {
   const seed = seedFor(userId)
   const run = freshRun()
   const result = rollEncounter(seed, run)
@@ -338,9 +365,17 @@ export async function enterPyramid(userId: T2): Promise<EncounterResult> {
   return result
 }
 
-export async function pushDeeper(userId: T2): Promise<EncounterResult> {
+async function pushDeeperImpl(userId: T2): Promise<EncounterResult> {
   const run = await getActiveRun(userId)
   if (!run.active) throw new GameError('no active run')
+  // Hazards are the one encounter type with no legitimate free skip (a
+  // gamble can be walked away from via "Leave It", client-side, at no
+  // cost — a hazard can't). Without this check a client could call push
+  // directly instead of resolving the pending hazard and take zero
+  // damage, spend zero wards, for every hazard in the run.
+  if (run.pendingType === 'hazard') {
+    throw new GameError('resolve the pending hazard first')
+  }
   const seed = seedFor(userId)
   const result = rollEncounter(seed, run)
   if (result.bandJustChanged) {
@@ -361,6 +396,12 @@ async function resolveHazard(
   const run = await getActiveRun(userId)
   if (!run.active || run.pendingType !== 'hazard') {
     throw new GameError('no pending hazard')
+  }
+  // The client disables the Ward button at 0 wards, but that's UI only —
+  // without this, a client could call this endpoint directly with 0
+  // wards left for unlimited free hazard immunity.
+  if (useWard && run.wards <= 0) {
+    throw new GameError('no wards remaining')
   }
   const seed = seedFor(userId)
   const depth = run.depth
@@ -446,15 +487,15 @@ async function resolveHazard(
   }
 }
 
-export function resolveWard(userId: T2): Promise<HazardOutcome> {
-  return resolveHazard(userId, true)
-}
+export const resolveWard = withUserLock((userId: T2) =>
+  resolveHazard(userId, true),
+)
 
-export function resolvePushUnwarded(userId: T2): Promise<HazardOutcome> {
-  return resolveHazard(userId, false)
-}
+export const resolvePushUnwarded = withUserLock((userId: T2) =>
+  resolveHazard(userId, false),
+)
 
-export async function resolveGambleRisk(userId: T2): Promise<GambleOutcome> {
+async function resolveGambleRiskImpl(userId: T2): Promise<GambleOutcome> {
   const run = await getActiveRun(userId)
   if (!run.active || run.pendingType !== 'gamble') {
     throw new GameError('no pending gamble')
@@ -502,12 +543,22 @@ export async function resolveGambleRisk(userId: T2): Promise<GambleOutcome> {
   return {success: false, damage, fatal: false, hud: hud(run)}
 }
 
-export async function extract(
+export const resolveGambleRisk = withUserLock(resolveGambleRiskImpl)
+
+async function extractImpl(
   userId: T2,
   username: string,
 ): Promise<ExtractResult> {
   const run = await getActiveRun(userId)
   if (!run.active) throw new GameError('no active run')
+  // Same reasoning as pushDeeper's guard — Extract has no button on the
+  // hazard/gamble screens in the real UI, but nothing stopped a direct
+  // call here from banking gold while skipping a pending hazard's damage
+  // entirely. Pending gambles are fine to extract past — "Leave It" is
+  // already a legitimate free skip, so this adds no new exploit there.
+  if (run.pendingType === 'hazard') {
+    throw new GameError('resolve the pending hazard first')
+  }
 
   const profile = await getProfile(userId)
   const goldThisRun = run.gold
@@ -533,10 +584,15 @@ export async function extract(
   }
 }
 
-export async function abandon(userId: T2): Promise<{hud: HudState}> {
+async function abandonImpl(userId: T2): Promise<{hud: HudState}> {
   const run = await getActiveRun(userId)
   if (!run.active) throw new GameError('no active run')
   await reportJourneyEnd(run.journeyId, false, run.gold)
   await clearActiveRun(userId)
   return {hud: {depth: 0, hp: run.hp, gold: 0, wards: run.wards}}
 }
+
+export const enterPyramid = withUserLock(enterPyramidImpl)
+export const pushDeeper = withUserLock(pushDeeperImpl)
+export const extract = withUserLock(extractImpl)
+export const abandon = withUserLock(abandonImpl)
