@@ -23,7 +23,7 @@
     "@devvit/analytics": "0.14.5",
     "@devvit/reddit": "0.14.5",
     "@devvit/web": "0.14.5",
-    "@types/node": "24.13.3",
+    "@types/node": "24.13.6",
     "devvit": "0.14.5",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
