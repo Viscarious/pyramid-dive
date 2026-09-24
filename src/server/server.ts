@@ -18,11 +18,14 @@ import {
   type LeaderboardRsp,
   type PushRsp,
   type PushUnwardedRsp,
+  type RelicsRsp,
   type WardRsp,
 } from '../shared/api.ts'
 import {
   abandon,
+  buyRelic,
   enterPyramid,
+  equipRelic,
   extract,
   GameError,
   getHub,
@@ -31,6 +34,7 @@ import {
   resolveGambleRisk,
   resolvePushUnwarded,
   resolveWard,
+  unequipRelic,
 } from './game/engine.ts'
 
 type AnyRsp =
@@ -45,6 +49,7 @@ type AnyRsp =
   | GambleRiskRsp
   | ExtractRsp
   | AbandonRsp
+  | RelicsRsp
 
 export async function onReq(
   reqMsg: IncomingMessage,
@@ -72,6 +77,10 @@ class AuthError extends Error {}
 function requireUserId(): T2 {
   if (!context.userId) throw new AuthError('must be logged in')
   return context.userId
+}
+
+function requireUsername(): string {
+  return context.username ?? 'anonymous'
 }
 
 async function route(
@@ -116,10 +125,37 @@ async function route(
         rsp = await resolveGambleRisk(requireUserId())
         break
       case Endpoint.RunExtract:
-        rsp = await extract(requireUserId(), context.username ?? 'anonymous')
+        rsp = await extract(requireUserId(), requireUsername())
         break
       case Endpoint.RunAbandon:
         rsp = await abandon(requireUserId())
+        break
+      case Endpoint.RelicsBuy: {
+        const tier = Number(new URLSearchParams(query).get('tier'))
+        rsp = await buyRelic(
+          requireUserId(),
+          requireUsername(),
+          context.subredditName,
+          tier,
+        )
+        break
+      }
+      case Endpoint.RelicsEquip: {
+        const tier = Number(new URLSearchParams(query).get('tier'))
+        rsp = await equipRelic(
+          requireUserId(),
+          requireUsername(),
+          context.subredditName,
+          tier,
+        )
+        break
+      }
+      case Endpoint.RelicsUnequip:
+        rsp = await unequipRelic(
+          requireUserId(),
+          requireUsername(),
+          context.subredditName,
+        )
         break
       case Endpoint.OnMenuNewPost:
         rsp = await routeMenuNewPost()

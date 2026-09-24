@@ -7,6 +7,7 @@ import {
   type HazardOutcome,
   type HubRsp,
   type LeaderboardRsp,
+  type RelicsRsp,
   type ReportData,
 } from '../shared/api.ts'
 
@@ -1029,6 +1030,19 @@ function goRelicShop(): void {
   showScreen('relic_shop')
 }
 
+// Reddit's flair API is text/color only (no custom icon upload), so the
+// real flair badge shows the relic's name — our own art stays in-app only.
+// See engine.ts's applyFlair/removeFlair.
+async function applyRelicsRsp(rsp: RelicsRsp | undefined): Promise<void> {
+  if (!rsp) return
+  state.ownedRelicTiers = rsp.relics.owned
+  state.equippedRelicTier = rsp.relics.equipped
+  state.banked = rsp.banked
+  renderHud()
+  renderRelicShop()
+  renderHubFlair()
+}
+
 function renderRelicShop(): void {
   $('rs-banked').textContent = `banked: ${state.banked}g`
   const rowsEl = $('rs-rows')
@@ -1054,30 +1068,28 @@ function renderRelicShop(): void {
       btn.className += ' rs-btn-unequip'
       btn.textContent = 'Unequip'
       btn.addEventListener('click', () => {
-        state.equippedRelicTier = null
-        renderRelicShop()
-        renderHubFlair()
+        void fetchJson<RelicsRsp>(Endpoint.RelicsUnequip, 'POST').then(
+          applyRelicsRsp,
+        )
       })
     } else if (owned) {
       btn.className += ' rs-btn-equip'
       btn.textContent = 'Equip'
       btn.addEventListener('click', () => {
-        state.equippedRelicTier = t.tier
-        renderRelicShop()
-        renderHubFlair()
+        void fetchJson<RelicsRsp>(
+          `${Endpoint.RelicsEquip}?tier=${t.tier}`,
+          'POST',
+        ).then(applyRelicsRsp)
       })
     } else {
       btn.className += ' rs-btn-buy'
       btn.textContent = `${t.price}g`
       ;(btn as HTMLButtonElement).disabled = !affordable
       btn.addEventListener('click', () => {
-        if (state.banked < t.price) return
-        state.banked -= t.price
-        state.ownedRelicTiers.push(t.tier)
-        state.equippedRelicTier = t.tier // buying auto-equips
-        renderHud()
-        renderRelicShop()
-        renderHubFlair()
+        void fetchJson<RelicsRsp>(
+          `${Endpoint.RelicsBuy}?tier=${t.tier}`,
+          'POST',
+        ).then(applyRelicsRsp)
       })
     }
     row.appendChild(btn)
@@ -1262,7 +1274,10 @@ async function init(): Promise<void> {
     state.banked = hub.profile.banked
     state.best = hub.profile.best
     state.bestDepth = hub.profile.bestDepth
+    state.ownedRelicTiers = hub.relics.owned
+    state.equippedRelicTier = hub.relics.equipped
     renderHud()
+    renderHubFlair()
   }
 }
 void init()

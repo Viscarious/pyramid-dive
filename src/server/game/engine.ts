@@ -1,12 +1,15 @@
+import {reddit} from '@devvit/web/server'
 import type {T2} from '@devvit/web/shared'
 import type {
   EncounterResult,
   ExtractResult,
   GambleOutcome,
   HazardOutcome,
+  HubRsp,
   HudState,
   LeaderboardRsp,
   Profile,
+  RelicsRsp,
   ReportData,
 } from '../../shared/api.ts'
 import {GAMBLES, TELEGRAPHS} from './content.ts'
@@ -17,6 +20,7 @@ import {
   STARTING_HP,
   STARTING_WARDS,
 } from './params.ts'
+import {relicTier} from './relics.ts'
 import {dailySeed, rollIndex, rollInt, rollPercent, todayUtc} from './rng.ts'
 import {
   type ActiveRun,
@@ -26,8 +30,10 @@ import {
   getLeaderboardPage,
   getLeaderboardRank,
   getProfile,
+  getRelics,
   setActiveRun,
   setProfile,
+  setRelics,
   submitToLeaderboard,
 } from './store.ts'
 
@@ -146,8 +152,109 @@ function seedFor(userId: T2): string {
   return dailySeed(userId, todayUtc())
 }
 
-export async function getHub(userId: T2): Promise<{profile: Profile}> {
-  return {profile: await getProfile(userId)}
+export async function getHub(userId: T2): Promise<HubRsp> {
+  const [profile, relics] = await Promise.all([
+    getProfile(userId),
+    getRelics(userId),
+  ])
+  return {profile, relics}
+}
+
+// Reddit's flair API is text/color only — no custom per-tier icon upload,
+// so the flair badge shows the relic's name, not its art. Wrapped
+// defensively: a flair-API hiccup (rate limit, transient error) shouldn't
+// roll back gold already spent or ownership already granted — the Redis
+// state here is the source of truth for what the player owns, the Reddit
+// flair is just its visible reflection.
+async function applyFlair(
+  subredditName: string,
+  username: string,
+  tier: number,
+): Promise<void> {
+  const def = relicTier(tier)
+  if (!def) return
+  try {
+    await reddit.setUserFlair({subredditName, username, text: def.name})
+  } catch (err) {
+    console.error(
+      `flair set failed for ${username}: ${err instanceof Error ? err.message : err}`,
+    )
+  }
+}
+
+async function removeFlair(
+  subredditName: string,
+  username: string,
+): Promise<void> {
+  try {
+    await reddit.removeUserFlair(subredditName, username)
+  } catch (err) {
+    console.error(
+      `flair remove failed for ${username}: ${err instanceof Error ? err.message : err}`,
+    )
+  }
+}
+
+export async function buyRelic(
+  userId: T2,
+  username: string,
+  subredditName: string,
+  tier: number,
+): Promise<RelicsRsp> {
+  const def = relicTier(tier)
+  if (!def) throw new GameError('invalid relic tier')
+
+  const [relics, profile] = await Promise.all([
+    getRelics(userId),
+    getProfile(userId),
+  ])
+  if (relics.owned.includes(tier)) throw new GameError('already owned')
+  if (profile.banked < def.price)
+    throw new GameError('insufficient banked gold')
+
+  profile.banked -= def.price
+  relics.owned.push(tier)
+  relics.equipped = tier // buying auto-equips, matching the client prototype
+
+  await Promise.all([setProfile(userId, profile), setRelics(userId, relics)])
+  await applyFlair(subredditName, username, tier)
+
+  return {relics, banked: profile.banked}
+}
+
+export async function equipRelic(
+  userId: T2,
+  username: string,
+  subredditName: string,
+  tier: number,
+): Promise<RelicsRsp> {
+  const [relics, profile] = await Promise.all([
+    getRelics(userId),
+    getProfile(userId),
+  ])
+  if (!relics.owned.includes(tier)) throw new GameError('relic not owned')
+
+  relics.equipped = tier
+  await setRelics(userId, relics)
+  await applyFlair(subredditName, username, tier)
+
+  return {relics, banked: profile.banked}
+}
+
+export async function unequipRelic(
+  userId: T2,
+  username: string,
+  subredditName: string,
+): Promise<RelicsRsp> {
+  const [relics, profile] = await Promise.all([
+    getRelics(userId),
+    getProfile(userId),
+  ])
+  relics.equipped = null
+  await setRelics(userId, relics)
+  await removeFlair(subredditName, username)
+
+  return {relics, banked: profile.banked}
 }
 
 const LEADERBOARD_PAGE_SIZE = 10

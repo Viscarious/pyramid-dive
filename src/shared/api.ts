@@ -98,7 +98,10 @@ export type LeaderboardRsp = {
   you: {rank: number; gold: number; depth: number} | null
 }
 
-export type HubRsp = {profile: Profile}
+export type RelicsState = {owned: number[]; equipped: number | null}
+export type RelicsRsp = {relics: RelicsState; banked: number}
+
+export type HubRsp = {profile: Profile; relics: RelicsState}
 export type EnterRsp = EncounterResult
 export type PushRsp = EncounterResult
 export type WardRsp = HazardOutcome
@@ -118,6 +121,9 @@ export const Endpoint = {
   RunGambleRisk: 'api/run/gamble-risk',
   RunExtract: 'api/run/extract',
   RunAbandon: 'api/run/abandon',
+  RelicsBuy: 'api/relics/buy',
+  RelicsEquip: 'api/relics/equip',
+  RelicsUnequip: 'api/relics/unequip',
   OnAppInstall: 'internal/on/app/install',
   OnMenuNewPost: 'internal/on/menu/new-post',
 } as const
@@ -132,6 +138,9 @@ export const EndpointMethod = {
   [Endpoint.RunGambleRisk]: 'POST',
   [Endpoint.RunExtract]: 'POST',
   [Endpoint.RunAbandon]: 'POST',
+  [Endpoint.RelicsBuy]: 'POST',
+  [Endpoint.RelicsEquip]: 'POST',
+  [Endpoint.RelicsUnequip]: 'POST',
   [Endpoint.OnAppInstall]: 'POST',
   [Endpoint.OnMenuNewPost]: 'POST',
 } as const satisfies {[endpoint: string]: 'GET' | 'POST'}

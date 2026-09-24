@@ -1,6 +1,6 @@
 import {redis} from '@devvit/web/server'
 import type {T2} from '@devvit/web/shared'
-import type {Profile} from '../../shared/api.ts'
+import type {Profile, RelicsState} from '../../shared/api.ts'
 
 export type PendingType = 'treasure' | 'hazard' | 'gamble' | null
 
@@ -175,4 +175,33 @@ export async function getLeaderboardRank(userId: T2): Promise<number | null> {
   ])
   if (ascendingRank === undefined) return null
   return count - ascendingRank
+}
+
+// ---- Relic Shop ----
+// Fully local/ephemeral until now (CLAUDE_CODE_PROMPT.md item 6) — owned
+// tiers and the equipped tier persist per user here, and equipping maps to
+// a real Reddit flair (see engine.ts's applyFlair/removeFlair).
+const EMPTY_RELICS: RelicsState = {owned: [], equipped: null}
+
+function relicsKey(userId: T2): string {
+  return `relics:${userId}`
+}
+
+export async function getRelics(userId: T2): Promise<RelicsState> {
+  const h = await redis.hGetAll(relicsKey(userId))
+  if (Object.keys(h).length === 0) return EMPTY_RELICS
+  return {
+    owned: h.owned ? h.owned.split(',').map(Number) : [],
+    equipped: h.equipped ? Number(h.equipped) : null,
+  }
+}
+
+export async function setRelics(
+  userId: T2,
+  relics: RelicsState,
+): Promise<void> {
+  await redis.hSet(relicsKey(userId), {
+    owned: relics.owned.join(','),
+    equipped: relics.equipped === null ? '' : String(relics.equipped),
+  })
 }
