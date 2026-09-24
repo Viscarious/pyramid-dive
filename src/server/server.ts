@@ -15,6 +15,7 @@ import {
   type ExtractRsp,
   type GambleRiskRsp,
   type HubRsp,
+  type LeaderboardRsp,
   type PushRsp,
   type PushUnwardedRsp,
   type WardRsp,
@@ -25,6 +26,7 @@ import {
   extract,
   GameError,
   getHub,
+  getLeaderboard,
   pushDeeper,
   resolveGambleRisk,
   resolvePushUnwarded,
@@ -36,6 +38,7 @@ type AnyRsp =
   | TriggerResponse
   | ErrorRsp
   | HubRsp
+  | LeaderboardRsp
   | PushRsp
   | WardRsp
   | PushUnwardedRsp
@@ -75,7 +78,10 @@ async function route(
   reqMsg: IncomingMessage,
   rspMsg: ServerResponse,
 ): Promise<void> {
-  const endpoint = reqMsg.url?.slice(1) as Endpoint
+  // reqMsg.url may carry a query string (e.g. leaderboard pagination) —
+  // split it off before matching against the Endpoint enum.
+  const [path, query] = (reqMsg.url ?? '').slice(1).split('?')
+  const endpoint = path as Endpoint
   const method = EndpointMethod[endpoint]
 
   let rsp: AnyRsp
@@ -86,6 +92,14 @@ async function route(
       case Endpoint.Hub:
         rsp = await getHub(requireUserId())
         break
+      case Endpoint.Leaderboard: {
+        const page = Number(new URLSearchParams(query).get('page') ?? '0')
+        rsp = await getLeaderboard(
+          requireUserId(),
+          Number.isFinite(page) ? page : 0,
+        )
+        break
+      }
       case Endpoint.RunEnter:
         rsp = await enterPyramid(requireUserId())
         break
@@ -102,7 +116,7 @@ async function route(
         rsp = await resolveGambleRisk(requireUserId())
         break
       case Endpoint.RunExtract:
-        rsp = await extract(requireUserId())
+        rsp = await extract(requireUserId(), context.username ?? 'anonymous')
         break
       case Endpoint.RunAbandon:
         rsp = await abandon(requireUserId())

@@ -85,6 +85,19 @@ export type ExtractResult = {
   profile: Profile
 }
 
+export type LeaderboardRow = {
+  rank: number
+  username: string
+  gold: number
+  depth: number
+}
+export type LeaderboardRsp = {
+  rows: LeaderboardRow[]
+  page: number
+  totalPages: number
+  you: {rank: number; gold: number; depth: number} | null
+}
+
 export type HubRsp = {profile: Profile}
 export type EnterRsp = EncounterResult
 export type PushRsp = EncounterResult
@@ -97,6 +110,7 @@ export type AbandonRsp = {hud: HudState}
 export type Endpoint = (typeof Endpoint)[keyof typeof Endpoint]
 export const Endpoint = {
   Hub: 'api/hub',
+  Leaderboard: 'api/leaderboard',
   RunEnter: 'api/run/enter',
   RunPush: 'api/run/push',
   RunWard: 'api/run/ward',
@@ -110,6 +124,7 @@ export const Endpoint = {
 
 export const EndpointMethod = {
   [Endpoint.Hub]: 'GET',
+  [Endpoint.Leaderboard]: 'GET',
   [Endpoint.RunEnter]: 'POST',
   [Endpoint.RunPush]: 'POST',
   [Endpoint.RunWard]: 'POST',

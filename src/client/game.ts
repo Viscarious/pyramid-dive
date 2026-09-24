@@ -6,6 +6,7 @@ import {
   type GambleOutcome,
   type HazardOutcome,
   type HubRsp,
+  type LeaderboardRsp,
   type ReportData,
 } from '../shared/api.ts'
 
@@ -818,93 +819,34 @@ $('report-new-run-btn').addEventListener('click', () => {
 })
 
 // ---- Leaderboard ----
-// Still fully mock — real per-subreddit Redis-backed ranking is a later
-// phase (CLAUDE_CODE_PROMPT.md item 5). 30 rival names, random gold/depth
-// regenerated fresh per visit, same as the source prototype. Player's own
-// best single-run gold (now server-sourced) is merged into the sort.
-function randInt(lo: number, hi: number): number {
-  return lo + Math.floor(Math.random() * (hi - lo + 1))
-}
-const MOCK_NAMES = [
-  'sandstep99',
-  'gilded_jackal',
-  'torch_and_go',
-  'relichunter',
-  'quietdiver',
-  'deepbones',
-  'ashen_scarab',
-  'nile_runner',
-  'cryptcaller',
-  'duskvault',
-  'sunkchamber',
-  'obelisk_joe',
-  'scarab_queen',
-  'tombraider22',
-  'lanternwick',
-  'sandwyrm',
-  'gilthief',
-  'echoshaft',
-  'brimstone_cat',
-  'hollowstep',
-  'vaultbreaker',
-  'ankh_seeker',
-  'mummywrap',
-  'duneglass',
-  'cursed_coin',
-  'jackalpaw',
-  'stonewhisper',
-  'goldveins',
-  'the_embalmer',
-  'nightdigger',
-]
-type LbRow = {rank: number; name: string; gold: number; depth: number}
-let leaderboardAllRows: LbRow[] = []
-let leaderboardYouRank: number | null = null
+// Real per-subreddit Redis-backed ranking (CLAUDE_CODE_PROMPT.md item 5) —
+// best single-run gold, depth as tiebreaker. See engine.ts's getLeaderboard().
 let leaderboardPageIdx = 0
+let leaderboardTotalPages = 1
 
-function goLeaderboard(): void {
-  const rivals = MOCK_NAMES.map(name => ({
-    name,
-    gold: randInt(20, 300),
-    depth: randInt(3, 35),
-  }))
-  rivals.sort((a, b) => b.gold - a.gold || b.depth - a.depth)
-  leaderboardAllRows = rivals.map((e, i) => ({
-    rank: i + 1,
-    name: e.name,
-    gold: e.gold,
-    depth: e.depth,
-  }))
-
-  leaderboardYouRank = null
-  if (state.best > 0) {
-    const combined = [
-      ...rivals,
-      {name: 'you', gold: state.best, depth: state.bestDepth},
-    ]
-    combined.sort((a, b) => b.gold - a.gold || b.depth - a.depth)
-    leaderboardYouRank = combined.findIndex(e => e.name === 'you') + 1
-  }
-
+async function goLeaderboard(): Promise<void> {
   leaderboardPageIdx = 0
-  renderLeaderboard()
   showScreen('leaderboard')
+  await loadLeaderboardPage()
 }
 
-function renderLeaderboard(): void {
-  const pageRows = leaderboardAllRows.slice(
-    leaderboardPageIdx * 10,
-    leaderboardPageIdx * 10 + 10,
+async function loadLeaderboardPage(): Promise<void> {
+  const rsp = await fetchJson<LeaderboardRsp>(
+    `${Endpoint.Leaderboard}?page=${leaderboardPageIdx}`,
+    'GET',
   )
+  if (!rsp) return
+  leaderboardTotalPages = rsp.totalPages
+
   const rowsEl = $('lb-rows')
   rowsEl.innerHTML = ''
-  pageRows.forEach(row => {
+  rsp.rows.forEach(row => {
     const div = document.createElement('div')
     div.className = 'lb-row'
     div.innerHTML = `
       <div class="lb-row-left">
         <span class="lb-rank">#${row.rank}</span>
-        <span class="lb-name">${row.name}</span>
+        <span class="lb-name">${row.username}</span>
       </div>
       <div class="lb-row-right">
         <span class="lb-depth-badge">depth ${row.depth}</span>
@@ -913,36 +855,33 @@ function renderLeaderboard(): void {
     rowsEl.appendChild(div)
   })
 
-  const totalPages = Math.ceil(leaderboardAllRows.length / 10) || 1
   $('lb-page-label').textContent =
-    `Page ${leaderboardPageIdx + 1} of ${totalPages}`
+    `Page ${leaderboardPageIdx + 1} of ${leaderboardTotalPages}`
   ;($('lb-prev-btn') as HTMLButtonElement).disabled = leaderboardPageIdx <= 0
   $('lb-prev-btn').style.opacity = leaderboardPageIdx > 0 ? '1' : '0.4'
   ;($('lb-next-btn') as HTMLButtonElement).disabled =
-    leaderboardPageIdx >= totalPages - 1
+    leaderboardPageIdx >= leaderboardTotalPages - 1
   $('lb-next-btn').style.opacity =
-    leaderboardPageIdx < totalPages - 1 ? '1' : '0.4'
+    leaderboardPageIdx < leaderboardTotalPages - 1 ? '1' : '0.4'
 
-  const hasScore = state.best > 0
-  $('lb-you-card').style.display = hasScore ? '' : 'none'
-  if (hasScore) {
-    $('lb-you-rank').textContent = `Rank #${leaderboardYouRank}`
-    $('lb-you-depth').textContent = `depth ${state.bestDepth}`
-    $('lb-you-gold').textContent = `${state.best}g`
+  $('lb-you-card').style.display = rsp.you ? '' : 'none'
+  if (rsp.you) {
+    $('lb-you-rank').textContent = `Rank #${rsp.you.rank}`
+    $('lb-you-depth').textContent = `depth ${rsp.you.depth}`
+    $('lb-you-gold').textContent = `${rsp.you.gold}g`
   }
 }
 
 $('lb-prev-btn').addEventListener('click', () => {
   if (leaderboardPageIdx > 0) {
     leaderboardPageIdx -= 1
-    renderLeaderboard()
+    void loadLeaderboardPage()
   }
 })
 $('lb-next-btn').addEventListener('click', () => {
-  const totalPages = Math.ceil(leaderboardAllRows.length / 10) || 1
-  if (leaderboardPageIdx < totalPages - 1) {
+  if (leaderboardPageIdx < leaderboardTotalPages - 1) {
     leaderboardPageIdx += 1
-    renderLeaderboard()
+    void loadLeaderboardPage()
   }
 })
 $('lb-back-btn').addEventListener('click', () => showScreen('hub'))
@@ -1294,7 +1233,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-jump]').forEach(btn => {
         bestDepth: state.bestDepth,
       })
     } else if (target === 'leaderboard') {
-      goLeaderboard()
+      void goLeaderboard()
     } else if (target === 'relic_shop') {
       goRelicShop()
     } else if (target === 'hazard_reveal') {

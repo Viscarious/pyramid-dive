@@ -101,3 +101,78 @@ export async function setProfile(userId: T2, profile: Profile): Promise<void> {
     personalBestDepth: String(profile.personalBestDepth),
   })
 }
+
+// ---- Leaderboard ----
+// A single Redis sorted set ranked by best single-run gold, depth as
+// tiebreaker, encoded into one score (Redis sorted sets only rank by a
+// single numeric dimension). 1,000,000 comfortably separates the two —
+// depth realistically never approaches six figures, so it can never bleed
+// into the gold digits. Per-subreddit and per-installation automatically,
+// same as the rest of Redis here — no global leaderboard.
+const LEADERBOARD_KEY = 'leaderboard:best-gold'
+const DEPTH_MULTIPLIER = 1_000_000
+
+function usernameKey(userId: T2): string {
+  return `username:${userId}`
+}
+
+function encodeScore(best: number, bestDepth: number): number {
+  return best * DEPTH_MULTIPLIER + bestDepth
+}
+
+export type LeaderboardEntry = {
+  userId: T2
+  username: string
+  gold: number
+  depth: number
+}
+
+/** Only called when a run sets a new personal best — see engine.ts's extract(). */
+export async function submitToLeaderboard(
+  userId: T2,
+  username: string,
+  best: number,
+  bestDepth: number,
+): Promise<void> {
+  await Promise.all([
+    redis.zAdd(LEADERBOARD_KEY, {
+      member: userId,
+      score: encodeScore(best, bestDepth),
+    }),
+    redis.set(usernameKey(userId), username),
+  ])
+}
+
+export async function getLeaderboardCount(): Promise<number> {
+  return redis.zCard(LEADERBOARD_KEY)
+}
+
+/** 0-indexed page, descending by score (highest gold first). */
+export async function getLeaderboardPage(
+  offset: number,
+  count: number,
+): Promise<LeaderboardEntry[]> {
+  const rows = await redis.zRange(LEADERBOARD_KEY, offset, offset + count - 1, {
+    by: 'rank',
+    reverse: true,
+  })
+  if (rows.length === 0) return []
+
+  const usernames = await redis.mGet(rows.map(r => usernameKey(r.member as T2)))
+  return rows.map((r, i) => ({
+    userId: r.member as T2,
+    username: usernames[i] ?? r.member,
+    gold: Math.floor(r.score / DEPTH_MULTIPLIER),
+    depth: r.score % DEPTH_MULTIPLIER,
+  }))
+}
+
+/** 1-indexed rank, or null if this user has never set a best. */
+export async function getLeaderboardRank(userId: T2): Promise<number | null> {
+  const [ascendingRank, count] = await Promise.all([
+    redis.zRank(LEADERBOARD_KEY, userId),
+    getLeaderboardCount(),
+  ])
+  if (ascendingRank === undefined) return null
+  return count - ascendingRank
+}

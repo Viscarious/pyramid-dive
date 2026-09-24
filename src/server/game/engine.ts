@@ -5,6 +5,7 @@ import type {
   GambleOutcome,
   HazardOutcome,
   HudState,
+  LeaderboardRsp,
   Profile,
   ReportData,
 } from '../../shared/api.ts'
@@ -21,9 +22,13 @@ import {
   type ActiveRun,
   clearActiveRun,
   getActiveRun,
+  getLeaderboardCount,
+  getLeaderboardPage,
+  getLeaderboardRank,
   getProfile,
   setActiveRun,
   setProfile,
+  submitToLeaderboard,
 } from './store.ts'
 
 export class GameError extends Error {}
@@ -143,6 +148,40 @@ function seedFor(userId: T2): string {
 
 export async function getHub(userId: T2): Promise<{profile: Profile}> {
   return {profile: await getProfile(userId)}
+}
+
+const LEADERBOARD_PAGE_SIZE = 10
+
+export async function getLeaderboard(
+  userId: T2,
+  page: number,
+): Promise<LeaderboardRsp> {
+  const offset = Math.max(0, page) * LEADERBOARD_PAGE_SIZE
+  const [entries, count, rank] = await Promise.all([
+    getLeaderboardPage(offset, LEADERBOARD_PAGE_SIZE),
+    getLeaderboardCount(),
+    getLeaderboardRank(userId),
+  ])
+
+  const rows = entries.map((e, i) => ({
+    rank: offset + i + 1,
+    username: e.username,
+    gold: e.gold,
+    depth: e.depth,
+  }))
+
+  let you: LeaderboardRsp['you'] = null
+  if (rank !== null) {
+    const profile = await getProfile(userId)
+    you = {rank, gold: profile.best, depth: profile.bestDepth}
+  }
+
+  return {
+    rows,
+    page: Math.max(0, page),
+    totalPages: Math.max(1, Math.ceil(count / LEADERBOARD_PAGE_SIZE)),
+    you,
+  }
 }
 
 export async function enterPyramid(userId: T2): Promise<EncounterResult> {
@@ -303,19 +342,26 @@ export async function resolveGambleRisk(userId: T2): Promise<GambleOutcome> {
   return {success: false, damage, fatal: false, hud: hud(run)}
 }
 
-export async function extract(userId: T2): Promise<ExtractResult> {
+export async function extract(
+  userId: T2,
+  username: string,
+): Promise<ExtractResult> {
   const run = await getActiveRun(userId)
   if (!run.active) throw new GameError('no active run')
 
   const profile = await getProfile(userId)
   const goldThisRun = run.gold
   profile.banked += goldThisRun
+  let isNewBest = false
   if (goldThisRun > profile.best) {
     profile.best = goldThisRun
     profile.bestDepth = run.depth
+    isNewBest = true
   }
   const report = buildReport('extracted', run, goldThisRun, profile)
   await setProfile(userId, profile)
+  if (isNewBest)
+    await submitToLeaderboard(userId, username, profile.best, profile.bestDepth)
   await clearActiveRun(userId)
 
   return {
