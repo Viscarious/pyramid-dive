@@ -1,3 +1,4 @@
+import {once} from 'node:events'
 import type {IncomingMessage, ServerResponse} from 'node:http'
 import {EntrypointHeight} from '@devvit/reddit'
 import {context, reddit} from '@devvit/web/server'
@@ -9,6 +10,7 @@ import type {
 } from '@devvit/web/shared'
 import {
   type AbandonRsp,
+  type ClientErrorReq,
   Endpoint,
   EndpointMethod,
   type ErrorRsp,
@@ -37,6 +39,8 @@ import {
   unequipRelic,
 } from './game/engine.ts'
 
+type OkRsp = {ok: true}
+
 type AnyRsp =
   | UiResponse
   | TriggerResponse
@@ -50,6 +54,7 @@ type AnyRsp =
   | ExtractRsp
   | AbandonRsp
   | RelicsRsp
+  | OkRsp
 
 export async function onReq(
   reqMsg: IncomingMessage,
@@ -99,7 +104,7 @@ async function route(
   } else {
     switch (endpoint) {
       case Endpoint.Hub:
-        rsp = await getHub(requireUserId())
+        rsp = await getHub(requireUserId(), context.subredditName)
         break
       case Endpoint.Leaderboard: {
         const page = Number(new URLSearchParams(query).get('page') ?? '0')
@@ -157,6 +162,9 @@ async function route(
           context.subredditName,
         )
         break
+      case Endpoint.ClientError:
+        rsp = await routeClientError(reqMsg)
+        break
       case Endpoint.OnMenuNewPost:
         rsp = await routeMenuNewPost()
         break
@@ -171,6 +179,25 @@ async function route(
   }
 
   writeJson<PartialJsonValue>('status' in rsp ? rsp.status : 200, rsp, rspMsg)
+}
+
+// Webview console.error/uncaught errors are invisible to `devvit logs` by
+// default — they're scoped to the iframe's own browser console, not the
+// app's server-side log stream (see CLAUDE_CODE_PROMPT.md item 8). The
+// client's window.onerror/unhandledrejection handlers (game.ts, splash.ts)
+// post here so client bugs actually surface during development instead of
+// failing silently.
+async function routeClientError(reqMsg: IncomingMessage): Promise<OkRsp> {
+  const req = await readJson<ClientErrorReq>(reqMsg)
+  console.error(`client error [${req.source}]: ${req.message}\n${req.stack}`)
+  return {ok: true}
+}
+
+async function readJson<T>(reqMsg: IncomingMessage): Promise<T> {
+  const chunks: Uint8Array[] = []
+  reqMsg.on('data', chunk => chunks.push(chunk))
+  await once(reqMsg, 'end')
+  return JSON.parse(`${Buffer.concat(chunks)}`)
 }
 
 // Splash (compact) is the default inline entrypoint; the full interactive

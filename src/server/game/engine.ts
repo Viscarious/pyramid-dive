@@ -160,18 +160,40 @@ function seedFor(userId: T2): string {
   return dailySeed(userId, todayUtc())
 }
 
-export async function getHub(userId: T2): Promise<HubRsp> {
+// Debug panel gate: subreddit moderators only. This is a reachability gate
+// for a dev/QA tool (screen jumps, SFX tests, ephemeral gold grants), not a
+// security boundary — good enough to keep real players from stumbling into
+// it, per CLAUDE_CODE_PROMPT.md item 9.
+async function isSubredditModerator(subredditName: string): Promise<boolean> {
+  try {
+    const user = await reddit.getCurrentUser()
+    if (!user) return false
+    const perms = await user.getModPermissionsForSubreddit(subredditName)
+    return perms.length > 0
+  } catch (err) {
+    console.error(
+      `moderator check failed: ${err instanceof Error ? err.message : err}`,
+    )
+    return false
+  }
+}
+
+export async function getHub(
+  userId: T2,
+  subredditName: string,
+): Promise<HubRsp> {
   // Best-effort proxy for "the game has loaded and is interactive" — the
   // Hub screen is the first thing rendered, and this is the first request
   // it makes. Not deduplicated per browser session (no clean server-side
   // signal for that here); an occasional extra App.Ready per visit is
   // harmless, per the Journeys docs.
   await reportAppReady()
-  const [profile, relics] = await Promise.all([
+  const [profile, relics, debugEnabled] = await Promise.all([
     getProfile(userId),
     getRelics(userId),
+    isSubredditModerator(subredditName),
   ])
-  return {profile, relics}
+  return {profile, relics, debugEnabled}
 }
 
 // Reddit's flair API is text/color only — no custom per-tier icon upload,

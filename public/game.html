@@ -100,10 +100,12 @@
   .sound-btn:hover { background: rgba(255,255,255,0.12); }
   .volume-slider { width: 44px; height: 4px; accent-color: var(--color-gold); cursor: pointer; }
 
-  /* Debug button: dev/QA-only affordance for jumping between screens while
-     the real game logic isn't wired up yet. Left in deliberately for now —
-     flag before shipping if it should be stripped for the real Devvit build. */
+  /* Debug button: dev/QA affordance for jumping between screens, testing
+     SFX, and granting gold. Hidden by default — only revealed via JS once
+     the Hub fetch confirms the current user moderates this subreddit (see
+     game.js's init()), so real players never see or can trigger it. */
   .debug-btn {
+    display: none;
     position: absolute; top: -4px; left: 0; z-index: 20;
     background: rgba(20,12,8,0.55); color: var(--color-bg-parchment-lt);
     font-size: 11px; font-weight: 700; letter-spacing: 0.04em;

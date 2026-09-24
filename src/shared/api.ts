@@ -101,7 +101,12 @@ export type LeaderboardRsp = {
 export type RelicsState = {owned: number[]; equipped: number | null}
 export type RelicsRsp = {relics: RelicsState; banked: number}
 
-export type HubRsp = {profile: Profile; relics: RelicsState}
+export type HubRsp = {
+  profile: Profile
+  relics: RelicsState
+  /** True only for subreddit moderators — gates the client's debug panel. */
+  debugEnabled: boolean
+}
 export type EnterRsp = EncounterResult
 export type PushRsp = EncounterResult
 export type WardRsp = HazardOutcome
@@ -109,6 +114,8 @@ export type PushUnwardedRsp = HazardOutcome
 export type GambleRiskRsp = GambleOutcome
 export type ExtractRsp = ExtractResult
 export type AbandonRsp = {hud: HudState}
+
+export type ClientErrorReq = {message: string; stack: string; source: string}
 
 export type Endpoint = (typeof Endpoint)[keyof typeof Endpoint]
 export const Endpoint = {
@@ -124,6 +131,7 @@ export const Endpoint = {
   RelicsBuy: 'api/relics/buy',
   RelicsEquip: 'api/relics/equip',
   RelicsUnequip: 'api/relics/unequip',
+  ClientError: 'api/client-error',
   OnAppInstall: 'internal/on/app/install',
   OnMenuNewPost: 'internal/on/menu/new-post',
 } as const
@@ -141,6 +149,7 @@ export const EndpointMethod = {
   [Endpoint.RelicsBuy]: 'POST',
   [Endpoint.RelicsEquip]: 'POST',
   [Endpoint.RelicsUnequip]: 'POST',
+  [Endpoint.ClientError]: 'POST',
   [Endpoint.OnAppInstall]: 'POST',
   [Endpoint.OnMenuNewPost]: 'POST',
 } as const satisfies {[endpoint: string]: 'GET' | 'POST'}

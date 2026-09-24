@@ -10,6 +10,9 @@ import {
   type RelicsRsp,
   type ReportData,
 } from '../shared/api.ts'
+import {installErrorReporting} from './errorReporting.ts'
+
+installErrorReporting('game')
 
 // ---- Fetch helpers ----
 // Errors are logged and surfaced as `undefined`, matching the template's
@@ -1276,6 +1279,7 @@ async function init(): Promise<void> {
     state.bestDepth = hub.profile.bestDepth
     state.ownedRelicTiers = hub.relics.owned
     state.equippedRelicTier = hub.relics.equipped
+    if (hub.debugEnabled) $('debug-open-btn').style.display = 'block'
     renderHud()
     renderHubFlair()
   }
