@@ -17,6 +17,9 @@
     "reddit": true,
     "journeys": true
   },
+  "marketingAssets": {
+    "icon": "assets/icon.png"
+  },
   "menu": {
     "items": [
       {
