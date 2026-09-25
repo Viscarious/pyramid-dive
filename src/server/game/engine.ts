@@ -1,6 +1,7 @@
 import {reddit} from '@devvit/web/server'
 import type {T2} from '@devvit/web/shared'
 import type {
+  DebugGoldRsp,
   EncounterResult,
   ExtractResult,
   GambleOutcome,
@@ -337,6 +338,28 @@ async function unequipRelicImpl(
 export const buyRelic = withUserLock(buyRelicImpl, {rateLimit: false})
 export const equipRelic = withUserLock(equipRelicImpl, {rateLimit: false})
 export const unequipRelic = withUserLock(unequipRelicImpl, {rateLimit: false})
+
+// Debug panel gold grant/clear. Mutates real, persisted banked gold (not a
+// display-only stub) so moderators can actually QA the relic shop —
+// gated the same way as the debug panel's own reachability (see
+// isSubredditModerator above), enforced server-side since debugEnabled on
+// the client is informational only.
+async function debugGrantGoldImpl(
+  userId: T2,
+  subredditName: string,
+  amount: number,
+): Promise<DebugGoldRsp> {
+  if (!(await isSubredditModerator(subredditName))) {
+    throw new GameError('debug tools are moderator-only')
+  }
+  const profile = await getProfile(userId)
+  profile.banked = Math.max(0, profile.banked + amount)
+  await setProfile(userId, profile)
+  return {banked: profile.banked}
+}
+export const debugGrantGold = withUserLock(debugGrantGoldImpl, {
+  rateLimit: false,
+})
 
 const LEADERBOARD_PAGE_SIZE = 10
 

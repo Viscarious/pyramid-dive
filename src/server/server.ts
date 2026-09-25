@@ -11,6 +11,7 @@ import type {
 import {
   type AbandonRsp,
   type ClientErrorReq,
+  type DebugGoldRsp,
   Endpoint,
   EndpointMethod,
   type ErrorRsp,
@@ -26,6 +27,7 @@ import {
 import {
   abandon,
   buyRelic,
+  debugGrantGold,
   enterPyramid,
   equipRelic,
   extract,
@@ -54,6 +56,7 @@ type AnyRsp =
   | ExtractRsp
   | AbandonRsp
   | RelicsRsp
+  | DebugGoldRsp
   | OkRsp
 
 export async function onReq(
@@ -168,6 +171,15 @@ async function route(
           context.subredditName,
         )
         break
+      case Endpoint.DebugGold: {
+        const amount = Number(new URLSearchParams(query).get('amount'))
+        rsp = await debugGrantGold(
+          requireUserId(),
+          context.subredditName,
+          Number.isFinite(amount) ? amount : 0,
+        )
+        break
+      }
       case Endpoint.ClientError:
         rsp = await routeClientError(reqMsg)
         break

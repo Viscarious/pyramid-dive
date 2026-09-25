@@ -117,6 +117,11 @@ export type AbandonRsp = {hud: HudState}
 
 export type ClientErrorReq = {message: string; stack: string; source: string}
 
+/** Debug-panel-only: grants (or, with a negative amount, removes) banked
+ * gold so moderators can QA the relic shop without a full run. Gated
+ * server-side to moderators — see engine.ts's isSubredditModerator. */
+export type DebugGoldRsp = {banked: number}
+
 export type Endpoint = (typeof Endpoint)[keyof typeof Endpoint]
 export const Endpoint = {
   Hub: 'api/hub',
@@ -131,6 +136,7 @@ export const Endpoint = {
   RelicsBuy: 'api/relics/buy',
   RelicsEquip: 'api/relics/equip',
   RelicsUnequip: 'api/relics/unequip',
+  DebugGold: 'api/debug/gold',
   ClientError: 'api/client-error',
   OnAppInstall: 'internal/on/app/install',
   OnMenuNewPost: 'internal/on/menu/new-post',
@@ -149,6 +155,7 @@ export const EndpointMethod = {
   [Endpoint.RelicsBuy]: 'POST',
   [Endpoint.RelicsEquip]: 'POST',
   [Endpoint.RelicsUnequip]: 'POST',
+  [Endpoint.DebugGold]: 'POST',
   [Endpoint.ClientError]: 'POST',
   [Endpoint.OnAppInstall]: 'POST',
   [Endpoint.OnMenuNewPost]: 'POST',

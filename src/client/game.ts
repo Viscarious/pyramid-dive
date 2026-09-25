@@ -1,5 +1,6 @@
 import {
   type AbandonRsp,
+  type DebugGoldRsp,
   type EncounterResult,
   Endpoint,
   type ExtractRsp,
@@ -1181,17 +1182,34 @@ Object.keys(SFX_FILES).forEach(key => {
   sfxGrid.appendChild(btn)
 })
 
-// Gold debug buttons mutate local state only — banked is server-authoritative
-// now, so these are for quick visual QA and won't survive a Hub reload.
+// Banked gold is server-authoritative and persisted, so grant/clear go
+// through the real debug endpoint (moderator-gated server-side) instead of
+// faking the HUD locally — a local-only stub let the number show but left
+// actual banked gold at 0, so relic purchases still failed and nothing
+// survived a reload.
 document.querySelectorAll<HTMLButtonElement>('[data-gold]').forEach(btn => {
   btn.addEventListener('click', () => {
     const v = btn.dataset.gold
-    if (v === 'clear') state.gold = 0
-    else if (v === 'banked-clear') state.banked = 0
-    else if (v === 'full-hp') state.hp = state.maxHp
-    else state.banked += Number(v)
-    renderHud()
-    if (currentScreenName === 'relic_shop') renderRelicShop()
+    if (v === 'clear') {
+      state.gold = 0
+      renderHud()
+      return
+    }
+    if (v === 'full-hp') {
+      state.hp = state.maxHp
+      renderHud()
+      return
+    }
+    const amount = v === 'banked-clear' ? -state.banked : Number(v)
+    void fetchJson<DebugGoldRsp>(
+      `${Endpoint.DebugGold}?amount=${amount}`,
+      'POST',
+    ).then(rsp => {
+      if (!rsp) return
+      state.banked = rsp.banked
+      renderHud()
+      if (currentScreenName === 'relic_shop') renderRelicShop()
+    })
   })
 })
 
