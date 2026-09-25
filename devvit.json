@@ -13,6 +13,8 @@
   },
   "server": {},
   "permissions": {
+    "redis": true,
+    "reddit": true,
     "journeys": true
   },
   "menu": {

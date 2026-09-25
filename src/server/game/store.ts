@@ -234,3 +234,25 @@ export async function acquireUserLock(userId: T2): Promise<boolean> {
 export async function releaseUserLock(userId: T2): Promise<void> {
   await redis.del(lockKey(userId))
 }
+
+// ---- Per-user rate limit ----
+// The lock above stops concurrent duplication but does nothing about a
+// scripted client hammering an endpoint sequentially as fast as the
+// network allows. The client's own descend/action-fade transitions take
+// ~2s end to end before the next action is even clickable, so a 1s
+// minimum interval is generous for real play while still capping a
+// scripted client to roughly 1 req/sec instead of unbounded. Redis expire()
+// only supports whole-second granularity, which is why this is 1s and not
+// something tighter.
+const RATE_LIMIT_SECONDS = 1
+
+function rateLimitKey(userId: T2): string {
+  return `ratelimit:${userId}`
+}
+
+/** True if this call is within the rate limit (i.e. allowed to proceed). */
+export async function checkRateLimit(userId: T2): Promise<boolean> {
+  const ok = await redis.hSetNX(rateLimitKey(userId), 'ts', String(Date.now()))
+  if (ok) await redis.expire(rateLimitKey(userId), RATE_LIMIT_SECONDS)
+  return ok === 1
+}

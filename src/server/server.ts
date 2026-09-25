@@ -195,7 +195,12 @@ async function route(
 // failing silently.
 const CLIENT_ERROR_FIELD_MAX = 4000
 
-function truncate(s: string): string {
+// The request body is arbitrary client-supplied JSON with no schema
+// enforcement before this point — coerce every field to a string so a
+// malformed payload (wrong types, missing fields) can't throw here and
+// surface as an unrelated-looking 500.
+function truncate(value: unknown): string {
+  const s = typeof value === 'string' ? value : String(value)
   return s.length > CLIENT_ERROR_FIELD_MAX
     ? `${s.slice(0, CLIENT_ERROR_FIELD_MAX)}… (truncated)`
     : s

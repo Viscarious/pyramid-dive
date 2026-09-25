@@ -25,6 +25,7 @@ import {dailySeed, rollIndex, rollInt, rollPercent, todayUtc} from './rng.ts'
 import {
   type ActiveRun,
   acquireUserLock,
+  checkRateLimit,
   clearActiveRun,
   getActiveRun,
   getLeaderboardCount,
@@ -51,12 +52,29 @@ export class GameError extends Error {}
 // Every mutating action below does read-Redis -> check -> modify -> write,
 // which isn't atomic on its own — see store.ts's acquireUserLock for what
 // that opens up (concurrent requests double-crediting the same gold, etc.)
-// and why this wrapper exists. Every exported mutating function is wrapped
-// with this before it's used anywhere.
+// and why this wrapper exists. It also enforces a minimum interval between
+// a single user's mutating actions (checkRateLimit) — the lock alone stops
+// concurrent duplication but does nothing to stop a scripted client
+// hammering an endpoint sequentially as fast as the network allows. Every
+// exported mutating function is wrapped with this before it's used anywhere.
+//
+// Run actions (descend/extract/wards/gambles) go through client-side
+// animation transitions of ~2s between clicks, so the rate limit is
+// invisible to real play there. The relic shop has no such throttle — buy
+// then immediately equip a different owned tier is a normal, expected
+// click sequence well under 1s — so those pass rateLimit: false and rely
+// on the lock alone for atomicity.
 function withUserLock<A extends unknown[], R>(
   fn: (userId: T2, ...args: A) => Promise<R>,
+  opts: {rateLimit: boolean} = {rateLimit: true},
 ): (userId: T2, ...args: A) => Promise<R> {
   return async (userId, ...args) => {
+    if (opts.rateLimit) {
+      const withinRateLimit = await checkRateLimit(userId)
+      if (!withinRateLimit) {
+        throw new GameError('slow down — try again in a moment')
+      }
+    }
     const acquired = await acquireUserLock(userId)
     if (!acquired) {
       throw new GameError('another action is already in progress — try again')
@@ -316,9 +334,9 @@ async function unequipRelicImpl(
   return {relics, banked: profile.banked}
 }
 
-export const buyRelic = withUserLock(buyRelicImpl)
-export const equipRelic = withUserLock(equipRelicImpl)
-export const unequipRelic = withUserLock(unequipRelicImpl)
+export const buyRelic = withUserLock(buyRelicImpl, {rateLimit: false})
+export const equipRelic = withUserLock(equipRelicImpl, {rateLimit: false})
+export const unequipRelic = withUserLock(unequipRelicImpl, {rateLimit: false})
 
 const LEADERBOARD_PAGE_SIZE = 10
 
