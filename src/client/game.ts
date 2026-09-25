@@ -166,6 +166,10 @@ let pendingGambleId: number | null = null
 // it to jump straight to the Dive Report without another round trip, since
 // the server already computed the report at the moment of death.
 let pendingReport: ReportData | null = null
+// The report currently on screen — unlike pendingReport (nulled once
+// consumed), this stays set for the report screen's lifetime so the Share
+// button can still read it.
+let currentReport: ReportData | null = null
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
 const screens = document.querySelectorAll<HTMLElement>('[data-screen]')
@@ -796,6 +800,7 @@ $('continue-btn').addEventListener('click', () => {
 // with a generic fallback line if none apply. All the underlying numbers
 // (isNewBest, minHp, hazardsFaced, hazardsWarded) come from the server now.
 function renderReport(report: ReportData): void {
+  currentReport = report
   const highlights: {text: string; color: string}[] = []
   if (report.isNewBest)
     highlights.push({
@@ -849,16 +854,33 @@ function renderReport(report: ReportData): void {
   showScreen('report')
 }
 
-$('report-share-btn').addEventListener('click', () => {
+function shareTextFor(report: ReportData): string {
+  const headline =
+    report.status === 'extracted'
+      ? `Extracted at depth ${report.depth} with ${report.goldAmount} gold.`
+      : `Fell at depth ${report.depth}. Lost ${report.goldAmount} gold.`
+  const best =
+    report.best > 0
+      ? ` Best haul: ${report.best} gold @ depth ${report.bestDepth}.`
+      : ''
+  return `Pyramid Dive — ${headline}${best}`
+}
+
+let shareNoteTimer: ReturnType<typeof setTimeout> | undefined
+$('report-share-btn').addEventListener('click', async () => {
+  if (!currentReport) return
+  try {
+    await navigator.clipboard.writeText(shareTextFor(currentReport))
+  } catch (err) {
+    console.error(
+      `clipboard write failed: ${err instanceof Error ? err.message : err}`,
+    )
+    return
+  }
   const note = $('share-note')
   note.style.display = ''
-  clearTimeout(
-    (window as unknown as {__shareTimer?: ReturnType<typeof setTimeout>})
-      .__shareTimer,
-  )
-  ;(
-    window as unknown as {__shareTimer?: ReturnType<typeof setTimeout>}
-  ).__shareTimer = setTimeout(() => {
+  clearTimeout(shareNoteTimer)
+  shareNoteTimer = setTimeout(() => {
     note.style.display = 'none'
   }, 2400)
 })
