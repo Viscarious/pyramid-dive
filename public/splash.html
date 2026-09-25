@@ -39,28 +39,6 @@
       background: none;
     }
 
-    @keyframes torchFlicker {
-      0%,
-      100% {
-        opacity: 0.75;
-      }
-      20% {
-        opacity: 0.95;
-      }
-      35% {
-        opacity: 0.65;
-      }
-      50% {
-        opacity: 0.88;
-      }
-      65% {
-        opacity: 0.7;
-      }
-      80% {
-        opacity: 0.92;
-      }
-    }
-
     .splash-card {
       position: relative;
       width: 100%;
@@ -83,32 +61,6 @@
       background: var(--gradient-splash-scrim);
       pointer-events: none;
     }
-    .splash-torch {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      mix-blend-mode: screen;
-      animation: torchFlicker 5.2s ease-in-out infinite;
-    }
-    .splash-torch--left {
-      background: radial-gradient(
-        circle at 37% 68%,
-        rgba(255, 170, 60, 0.55) 0%,
-        rgba(255, 140, 40, 0.22) 7%,
-        transparent 16%
-      );
-    }
-    .splash-torch--right {
-      background: radial-gradient(
-        circle at 59% 68%,
-        rgba(255, 170, 60, 0.55) 0%,
-        rgba(255, 140, 40, 0.22) 7%,
-        transparent 16%
-      );
-      animation-duration: 6.2s;
-      animation-delay: 0.6s;
-    }
-
     .splash-content {
       position: relative;
       height: 100%;
@@ -181,8 +133,6 @@
         alt="Pyramid entrance at dusk"
       >
       <div class="splash-scrim"></div>
-      <div class="splash-torch splash-torch--left"></div>
-      <div class="splash-torch splash-torch--right"></div>
       <div class="splash-content">
         <div class="splash-flourish-row">
           <svg
