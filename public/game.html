@@ -164,6 +164,8 @@
   .hub-flair-row { display: flex; justify-content: center; margin-bottom: clamp(6px, 2dvh, 16px); }
   .hub-flair-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--color-teal); color: var(--color-bg-parchment-hi); font-size: 12px; font-weight: 700; padding: 4px 14px 4px 5px; border-radius: var(--radius-pill); letter-spacing: 0.04em; }
   .hub-flair-icon { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; object-fit: contain; }
+  .hub-notice-row { display: flex; justify-content: center; margin-bottom: clamp(6px, 2dvh, 16px); text-align: center; }
+  .hub-notice-pill { display: inline-flex; align-items: center; background: rgba(0,0,0,0.45); color: var(--color-bg-parchment-hi); font-size: 12px; font-weight: 700; padding: 6px 16px; border-radius: var(--radius-pill); letter-spacing: 0.02em; }
   .hub-spacer { flex: 1; }
   .hub-actions { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 2dvh, 16px); }
   .btn-enter { display: flex; justify-content: center; align-items: center; min-width: 240px; padding: clamp(12px, 3dvh, 18px) 30px; border-radius: var(--radius-lg); background: var(--gradient-gold-btn-deep); box-shadow: 0 5px 0 var(--color-gold-shadow); color: var(--color-ink); transition: filter 0.15s, transform 0.1s, box-shadow 0.1s; }
@@ -415,6 +417,9 @@
           </div>
           <p class="hub-subtitle">A push-your-luck descent into the tomb.<span class="hub-subtitle-line2"><br>How deep before the curse catches you?</span></p>
 
+          <div class="hub-notice-row" id="hub-notice-row" style="display:none;">
+            <span class="hub-notice-pill" id="hub-notice-text"></span>
+          </div>
           <div class="hub-flair-row" id="hub-flair-row" style="display:none;">
             <span class="hub-flair-pill">
               <img class="hub-flair-icon" id="hub-flair-icon" src="" alt="">

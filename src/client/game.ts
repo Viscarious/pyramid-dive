@@ -18,9 +18,16 @@ installErrorReporting('game')
 // ---- Fetch helpers ----
 // Errors are logged and surfaced as `undefined`, matching the template's
 // fetch.ts pattern — callers bail out rather than throw into a click handler.
+// `onStale` fires only on a 409 (GameError) — the run-loop endpoints use it
+// to recover when the server-side run this client thinks it's playing is
+// gone (e.g. the same account started a new run on another device/tab,
+// which silently supersedes the old one — there's one ActiveRun per user,
+// not per session). Without this, the client just sat dead on whatever
+// screen it was on with no explanation.
 async function fetchJson<T>(
   endpoint: string,
   method: 'GET' | 'POST',
+  opts?: {onStale?: () => void},
 ): Promise<T | undefined> {
   let rsp: Response
   try {
@@ -32,9 +39,40 @@ async function fetchJson<T>(
   if (!rsp.ok) {
     const text = await rsp.text().catch(() => '')
     console.error(`HTTP status ${rsp.status}: ${rsp.statusText}; ${text}`)
+    if (rsp.status === 409) opts?.onStale?.()
     return undefined
   }
   return (await rsp.json()) as T
+}
+
+let hubNoticeTimer: ReturnType<typeof setTimeout> | undefined
+function showHubNotice(message: string): void {
+  const row = $('hub-notice-row')
+  $('hub-notice-text').textContent = message
+  row.style.display = 'flex'
+  clearTimeout(hubNoticeTimer)
+  hubNoticeTimer = setTimeout(() => {
+    row.style.display = 'none'
+  }, 6000)
+}
+
+// Bounces back to the Hub and re-syncs from the server after a run-loop
+// action comes back 409 — see fetchJson's onStale doc comment above.
+function recoverFromStaleRun(): void {
+  state.depth = 0
+  state.gold = 0
+  showScreen('hub')
+  showHubNotice('Your run ended — it may have continued on another device.')
+  void fetchJson<HubRsp>(Endpoint.Hub, 'GET').then(hub => {
+    if (!hub) return
+    state.banked = hub.profile.banked
+    state.best = hub.profile.best
+    state.bestDepth = hub.profile.bestDepth
+    state.ownedRelicTiers = hub.relics.owned
+    state.equippedRelicTier = hub.relics.equipped
+    renderHud()
+    renderHubFlair()
+  })
 }
 
 // ---- Run state ----
@@ -526,7 +564,9 @@ $('enter-pyramid-btn').addEventListener('click', async () => {
 
 $('push-deeper-btn').addEventListener('click', async () => {
   playSfx('pushDeeper')
-  const result = await fetchJson<EncounterResult>(Endpoint.RunPush, 'POST')
+  const result = await fetchJson<EncounterResult>(Endpoint.RunPush, 'POST', {
+    onStale: recoverFromStaleRun,
+  })
   if (!result) return
   runDescendTransition(() => renderEncounter(result), playPendingRevealSound)
 })
@@ -540,7 +580,9 @@ $('extract-modal-keep-btn').addEventListener('click', () => {
 })
 $('extract-modal-confirm-btn').addEventListener('click', async () => {
   $('extract-modal').style.display = 'none'
-  const result = await fetchJson<ExtractRsp>(Endpoint.RunExtract, 'POST')
+  const result = await fetchJson<ExtractRsp>(Endpoint.RunExtract, 'POST', {
+    onStale: recoverFromStaleRun,
+  })
   if (!result) return
   playSfx('extractSuccess')
   state.banked = result.profile.banked
@@ -573,6 +615,7 @@ async function resolveHazard(useWard: boolean): Promise<void> {
   const result = await fetchJson<HazardOutcome>(
     useWard ? Endpoint.RunWard : Endpoint.RunPushUnwarded,
     'POST',
+    {onStale: recoverFromStaleRun},
   )
   if (!result) return
   state.depth = result.hud.depth
@@ -643,6 +686,7 @@ $('gamble-risk-btn').addEventListener('click', () => {
     const result = await fetchJson<GambleOutcome>(
       Endpoint.RunGambleRisk,
       'POST',
+      {onStale: recoverFromStaleRun},
     )
     if (!result) return
     state.depth = result.hud.depth
@@ -1133,7 +1177,9 @@ $('modal-keep-btn').addEventListener('click', () => {
   $('abandon-modal').style.display = 'none'
 })
 $('modal-abandon-btn').addEventListener('click', async () => {
-  const result = await fetchJson<AbandonRsp>(Endpoint.RunAbandon, 'POST')
+  const result = await fetchJson<AbandonRsp>(Endpoint.RunAbandon, 'POST', {
+    onStale: recoverFromStaleRun,
+  })
   $('abandon-modal').style.display = 'none'
   if (result) {
     state.gold = result.hud.gold
