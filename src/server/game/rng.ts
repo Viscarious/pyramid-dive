@@ -1,21 +1,26 @@
-import {createHash} from 'node:crypto'
+import {createHash, randomBytes} from 'node:crypto'
 
 /**
- * Deterministic per-user-per-day seeded RNG.
+ * Deterministic per-run seeded RNG.
  *
- * Design intent (design doc v0.11 Section 6): a per-user-per-day seed keeps
- * the difficulty curve fair across all players on a given day while giving
- * each player their own distinct encounter sequence — a fully shared daily
- * seed was explicitly rejected because Reddit's comment culture makes
- * spoiler leakage ("hazard at depth 5") near-certain within the first hour.
+ * Design intent (design doc v0.11 Section 6): a per-user seed keeps the
+ * difficulty curve fair across all players while giving each player their
+ * own distinct encounter sequence — a fully shared seed was explicitly
+ * rejected because Reddit's comment culture makes spoiler leakage ("hazard
+ * at depth 5") near-certain within the first hour. The per-run nonce below
+ * is layered on top of that: without it, a per-user-per-day seed alone
+ * makes every replay on the same day identical, so a player who's already
+ * died or extracted once can memorize the rest of the day's run instead of
+ * facing real risk on wards/gambles.
  *
  * Every roll is a pure function of (seed, depth, channel) — not a stateful
  * stream. This means a run's outcome at a given depth is fully reproducible
- * (today's dive plays out identically every time that user replays it, like
- * a daily challenge), and the server never needs to persist "what was
- * rolled" for a pending encounter — ward/push-unwarded/gamble-risk just
+ * for the lifetime of that run, and the server never needs to persist "what
+ * was rolled" for a pending encounter — ward/push-unwarded/gamble-risk just
  * recompute the same deterministic values for the current depth when the
- * player commits to an action.
+ * player commits to an action. The per-run nonce (see runNonce below) is
+ * what makes that reproducibility scoped to a single run instead of a
+ * whole day.
  */
 export function dailySeed(userId: string, dateUtc: string): string {
   return `${userId}:${dateUtc}`
@@ -24,6 +29,12 @@ export function dailySeed(userId: string, dateUtc: string): string {
 /** YYYY-MM-DD in UTC, so the daily boundary is the same for every player. */
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+/** Fresh per-run randomness, folded into the seed so each run this user
+ * starts gets its own encounter sequence instead of replaying the day's. */
+export function runNonce(): string {
+  return randomBytes(16).toString('hex')
 }
 
 /** Deterministic float in [0, 1) for (seed, depth, channel). */

@@ -22,7 +22,14 @@ import {
   STARTING_WARDS,
 } from './params.ts'
 import {relicTier} from './relics.ts'
-import {dailySeed, rollIndex, rollInt, rollPercent, todayUtc} from './rng.ts'
+import {
+  dailySeed,
+  rollIndex,
+  rollInt,
+  rollPercent,
+  runNonce,
+  todayUtc,
+} from './rng.ts'
 import {
   type ActiveRun,
   acquireUserLock,
@@ -110,6 +117,7 @@ function freshRun(): ActiveRun {
     lastBand: 0,
     pendingType: null,
     journeyId: '',
+    runSeed: runNonce(),
   }
 }
 
@@ -198,8 +206,11 @@ function buildReport(
   }
 }
 
-function seedFor(userId: T2): string {
-  return dailySeed(userId, todayUtc())
+// The date component keeps the seed fresh across day boundaries even for a
+// run that spans midnight; the run nonce is what actually keeps each run
+// distinct from the last — see rng.ts's runNonce.
+function seedFor(userId: T2, run: ActiveRun): string {
+  return `${dailySeed(userId, todayUtc())}:${run.runSeed}`
 }
 
 // Debug panel gate: subreddit moderators only. This is a reachability gate
@@ -396,8 +407,8 @@ export async function getLeaderboard(
 }
 
 async function enterPyramidImpl(userId: T2): Promise<EncounterResult> {
-  const seed = seedFor(userId)
   const run = freshRun()
+  const seed = seedFor(userId, run)
   const result = rollEncounter(seed, run)
   // "Enter the Pyramid" is the explicit user action that begins a session —
   // Journey.Start must never fire on app load (see telemetry.ts).
@@ -417,7 +428,7 @@ async function pushDeeperImpl(userId: T2): Promise<EncounterResult> {
   if (run.pendingType === 'hazard') {
     throw new GameError('resolve the pending hazard first')
   }
-  const seed = seedFor(userId)
+  const seed = seedFor(userId, run)
   const result = rollEncounter(seed, run)
   if (result.bandJustChanged) {
     await reportBandProgress(
@@ -444,7 +455,7 @@ async function resolveHazard(
   if (useWard && run.wards <= 0) {
     throw new GameError('no wards remaining')
   }
-  const seed = seedFor(userId)
+  const seed = seedFor(userId, run)
   const depth = run.depth
   const band = bandFor(depth)
   // biome-ignore lint/style/noNonNullAssertion: Math.min(band,2) is always a valid TELEGRAPHS index
@@ -541,7 +552,7 @@ async function resolveGambleRiskImpl(userId: T2): Promise<GambleOutcome> {
   if (!run.active || run.pendingType !== 'gamble') {
     throw new GameError('no pending gamble')
   }
-  const seed = seedFor(userId)
+  const seed = seedFor(userId, run)
   const depth = run.depth
   const band = bandFor(depth)
   run.pendingType = null

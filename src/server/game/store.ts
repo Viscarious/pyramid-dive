@@ -18,6 +18,8 @@ export type ActiveRun = {
   pendingType: PendingType
   /** Devvit Journeys id for this run, '' if telemetry hasn't started one yet. */
   journeyId: string
+  /** Per-run RNG nonce — see rng.ts's runNonce for why this exists. */
+  runSeed: string
 }
 
 const NO_ACTIVE_RUN: ActiveRun = {
@@ -32,6 +34,7 @@ const NO_ACTIVE_RUN: ActiveRun = {
   lastBand: 0,
   pendingType: null,
   journeyId: '',
+  runSeed: '',
 }
 
 const EMPTY_PROFILE: Profile = {
@@ -64,6 +67,7 @@ export async function getActiveRun(userId: T2): Promise<ActiveRun> {
     lastBand: Number(h.lastBand),
     pendingType: (h.pendingType as PendingType) || null,
     journeyId: h.journeyId ?? '',
+    runSeed: h.runSeed ?? '',
   }
 }
 
@@ -80,6 +84,7 @@ export async function setActiveRun(userId: T2, run: ActiveRun): Promise<void> {
     lastBand: String(run.lastBand),
     pendingType: run.pendingType ?? '',
     journeyId: run.journeyId,
+    runSeed: run.runSeed,
   })
 }
 
