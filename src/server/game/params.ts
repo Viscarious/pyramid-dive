@@ -25,12 +25,12 @@ export const PARAMS = {
   gambleSuccess: 50,
   bandEnds: [10, 20, 30, 40], // depth <= bandEnds[i] -> band i; beyond last -> band 4
   dmg: [
+    [1, 2],
     [1, 3],
+    [1, 4],
     [2, 4],
     [3, 4],
-    [4, 4],
-    [4, 4],
-  ], // capped at 4 from Band 4 on — never a one-shot at 5 starting HP
+  ], // max hit is 4 in every band — never a one-shot at 5 starting HP
   treasure: [
     [3, 5],
     [5, 8],
