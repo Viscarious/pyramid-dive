@@ -20,11 +20,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
-    "@devvit/analytics": "0.14.5",
-    "@devvit/reddit": "0.14.5",
-    "@devvit/web": "0.14.5",
+    "@devvit/analytics": "0.14.7",
+    "@devvit/reddit": "0.14.7",
+    "@devvit/web": "0.14.7",
     "@types/node": "24.13.3",
-    "devvit": "0.14.5",
+    "devvit": "0.14.7",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
   },
